@@ -66,7 +66,7 @@ os.chdir(sources_path)
 hidden_imports = ['wx._adv', 'wx._html', 'wx._xml']
 hidden_imports = sum((['--hidden-import', i] for i in hidden_imports), [])
 
-pyinst_cmd = ['pyinstaller', '-n', name, '--distpath', dist_path] + vlc_binaries + hidden_imports + pyinst_flags
+pyinst_cmd = [sys.executable, '-m', 'PyInstaller', '-n', name, '--distpath', dist_path] + vlc_binaries + hidden_imports + pyinst_flags
 
 print("Running:", " ".join(pyinst_cmd))
 
@@ -97,7 +97,7 @@ if p.poll() == 0:
         from glob import glob
         libs_to_exclude = ['MSVCP140.dll', 'VCRUNTIME140.dll'] + glob('api-ms-*')
     print("--- Removing:", libs_to_exclude)
-    [os.remove(lib) for lib in libs_to_exclude]
+    [os.remove(lib) for lib in libs_to_exclude if os.path.isfile(lib)]
 
 plugins_cache = os.path.join(bin_path, name, 'plugins', 'plugins.dat')
 if os.path.isfile(plugins_cache):
