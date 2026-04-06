@@ -1,3 +1,9 @@
+Модификация FestEngine с добавлением нескольких фич и фиксов:
+- Добавлена возможность продолжения остановленого по ESC трека нажатием F5
+- Добавлена возможность перемотки трека при помощи перетаскивания ползунка прогресс-бара
+- Костыльно исправлен баг отсутствия музыки в треке при наличии фоновой музыки (fade-out фоновой музыки убран в пользу старта основного трека сразу)
+
+Далее оригинальный ридми:
 [![Build status](https://ci.appveyor.com/api/projects/status/c7ekg1bix79434tm?svg=true)](https://ci.appveyor.com/project/Himura2la/festengine)
 [![](etc/gitter_shield.svg)](https://gitter.im/FestEngine/Lobby?utm_source=share-link&utm_medium=link&utm_campaign=share-link)
 
