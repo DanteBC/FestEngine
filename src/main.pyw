@@ -115,6 +115,12 @@ class MainWindow(wx.Frame):
         self.full_grid_data = None
         self.num_in_player = None
         self.current_playing_row = None
+        self.paused_playing_row = None  # Store row position when paused
+
+        # Store stopped track state for F5 recovery
+        self.stopped_file_offset = None
+        self.stopped_num = None
+        self.stopped_row = None
 
         self.player_time_update_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.player_time_update, self.player_time_update_timer)
@@ -253,6 +259,7 @@ class MainWindow(wx.Frame):
         show_zad_item = menu_play.Append(wx.ID_ANY, _("Show &ZAD\tF1"))
         clear_zad_item = menu_play.Append(wx.ID_ANY, _("&Clear ZAD\tShift+F1"))
         play_track_item = menu_play.Append(wx.ID_ANY, _("&Play Sound/Video\tF2"))
+        resume_stopped_item = menu_play.Append(wx.ID_ANY, _("&Resume Stopped Track\tF5"))
         fade_out_item = menu_play.Append(wx.ID_ANY, _("&Fade Out\tShift+F2"))
         end_show_item = menu_play.Append(wx.ID_ANY, _("&End Show (Clear ZAD + Fade Out)\tEsc"))
         no_show_item = menu_play.Append(wx.ID_ANY, _("&Black Screen\tAlt+F1"))
@@ -266,6 +273,7 @@ class MainWindow(wx.Frame):
         self.Bind(wx.EVT_MENU, self.show_zad, show_zad_item)
         self.Bind(wx.EVT_MENU, self.clear_zad, clear_zad_item)
         self.Bind(wx.EVT_MENU, self.play_async, play_track_item)
+        self.Bind(wx.EVT_MENU, self.resume_stopped_track, resume_stopped_item)
         self.Bind(wx.EVT_MENU, self.stop_async, fade_out_item)
         self.Bind(wx.EVT_MENU, self.end_show, end_show_item)
         self.Bind(wx.EVT_MENU, lambda e: self.clear_zad(e, True), no_show_item)
@@ -277,6 +285,7 @@ class MainWindow(wx.Frame):
             wx.AcceleratorEntry(wx.ACCEL_NORMAL, wx.WXK_F1, show_zad_item.GetId()),
             wx.AcceleratorEntry(wx.ACCEL_SHIFT, wx.WXK_F1, clear_zad_item.GetId()),
             wx.AcceleratorEntry(wx.ACCEL_NORMAL, wx.WXK_F2, play_track_item.GetId()),
+            wx.AcceleratorEntry(wx.ACCEL_NORMAL, wx.WXK_F5, resume_stopped_item.GetId()),
             wx.AcceleratorEntry(wx.ACCEL_SHIFT, wx.WXK_F2, fade_out_item.GetId()),
             wx.AcceleratorEntry(wx.ACCEL_NORMAL, wx.WXK_ESCAPE, end_show_item.GetId()),
             wx.AcceleratorEntry(wx.ACCEL_ALT, wx.WXK_F1, no_show_item.GetId()),
@@ -314,8 +323,9 @@ class MainWindow(wx.Frame):
         self.toolbar.Add(self.fade_out_btn, 0)
         self.fade_out_btn.Bind(wx.EVT_BUTTON, self.stop_async)
 
-        self.time_bar = wx.Gauge(self, range=1, size=(-1, toolbar_base_height))
+        self.time_bar = wx.Slider(self, value=0, minValue=0, maxValue=1, size=(-1, toolbar_base_height))
         self.toolbar.Add(self.time_bar, 1, wx.ALIGN_CENTER_VERTICAL)
+        self.time_bar.Bind(wx.EVT_LEFT_DOWN, self.on_slider_click)
         self.time_label = wx.StaticText(self, label='Stop', size=(50, -1), style=wx.ALIGN_CENTER)
         self.toolbar.Add(self.time_label, 0, wx.ALIGN_CENTER_VERTICAL)
 
@@ -682,6 +692,11 @@ class MainWindow(wx.Frame):
         self.status(status)
 
     def end_show(self, e=None):
+        # Save stopped track state for F5 recovery
+        if self.is_playing or self.player.get_state() in [vlc.State.Paused]:
+            self.stopped_file_offset = self.player.get_time()
+            self.stopped_num = self.num_in_player
+            self.stopped_row = self.current_playing_row
         self.stop_async()
         self.clear_zad()
 
@@ -1009,7 +1024,11 @@ class MainWindow(wx.Frame):
         except IndexError:
             self.player_status = _(u'Nothing to play for %s%s') % ('№', num)
             return
-        self.play_pause_bg(play=False)
+
+        # Stop background music completely (not just pause) to avoid audio interference
+        if self.bg_player.player.get_state() in [vlc.State.Playing, vlc.State.Paused]:
+            self.bg_player.player.stop()
+
         self.player.set_media(self.vlc_instance.media_new(file_path))
 
         if not sound_only:
@@ -1090,7 +1109,7 @@ class MainWindow(wx.Frame):
                              args=(self.fade_out_btn.GetLabel(),)).start()
         else:
             self.player.stop()
-            self.time_bar.SetRange(1)
+            self.time_bar.SetMax(1)
             self.time_bar.SetValue(0)
             self.player_status = self.player_state_parse(self.player.get_state())
             self.time_label.SetLabel('Stopped')
@@ -1112,13 +1131,112 @@ class MainWindow(wx.Frame):
 
         def ui_upd():
             self.fade_out_btn.SetLabel(fade_out_btn_label)
-            self.time_bar.SetRange(1)
+            self.time_bar.SetMax(1)
             self.time_bar.SetValue(0)
             self.player_status = self.player_state_parse(self.player.get_state())
             self.time_label.SetLabel('Stopped')
             self.set_timecode('stop')
 
         wx.CallAfter(ui_upd)
+
+    def pause_playback(self, e=None):
+        if not self.is_playing:
+            return
+        # Save current row position for resume
+        self.paused_playing_row = self.current_playing_row
+        self.player.set_pause(True)
+        self.player_status = self.player_state_parse(self.player.get_state())
+
+    def resume_playback(self, e=None):
+        if self.player.get_state() != vlc.State.Paused:
+            return
+
+        # Restore cursor to the paused track row
+        if self.paused_playing_row is not None:
+            self.grid.SetGridCursor(self.paused_playing_row, 0)
+            self.grid.SelectRow(self.paused_playing_row)
+            self.grid.MakeCellVisible(self.paused_playing_row, 0)
+            self.paused_playing_row = None  # Clear the paused state now that we're resuming
+
+        # Показываем видео на проекторе если текущий файл содержит видео
+        if self.num_in_player and self.num_in_player in self.data:
+            try:
+                files = self.data[self.num_in_player]['files'].items()  # (ext, path)
+                video_files = [file[1] for file in files if file[0] in FileTypes.video_extensions]
+
+                if video_files and not self.prefer_audio.IsChecked():
+                    self.ensure_proj_win()
+                    self.switch_to_vid()
+                elif self.auto_zad.IsChecked():
+                    self.show_zad()
+            except (KeyError, IndexError):
+                pass
+
+        self.player.set_pause(False)
+        self.player_time_update_timer.Start(self.player_time_update_interval_ms)
+        self.player_status = self.player_state_parse(self.player.get_state())
+
+    def resume_stopped_track(self, e=None):
+        """Resume the track that was stopped by ESC"""
+        if self.stopped_num is None:
+            return
+
+        # Restore track info
+        self.num_in_player = self.stopped_num
+        self.current_playing_row = self.stopped_row
+
+        # Restore cursor position
+        self.grid.SetGridCursor(self.stopped_row, 0)
+        self.grid.SelectRow(self.stopped_row)
+        self.grid.MakeCellVisible(self.stopped_row, 0)
+
+        # Load the media file
+        try:
+            files = self.data[self.stopped_num]['files'].items()  # (ext, path)
+            is_stream = any([file[0] == 'm3u' for file in files])
+            video_files = [file[1] for file in files if file[0] in FileTypes.video_extensions]
+
+            if video_files and not self.prefer_audio.IsChecked():
+                file_path = open(video_files[0], 'r').read() if is_stream else video_files[0]
+                sound_only = False
+            else:
+                audio_files = [file[1] for file in files if file[0] in FileTypes.audio_extensions]
+                file_path, sound_only = (audio_files[0], True) if audio_files else (video_files[0], False)
+        except IndexError:
+            return
+
+        # Stop background music completely (not just pause) to avoid audio interference
+        if self.bg_player.player.get_state() in [vlc.State.Playing, vlc.State.Paused]:
+            self.bg_player.player.stop()
+
+        self.player.set_media(self.vlc_instance.media_new(file_path))
+
+        if not sound_only:
+            self.ensure_proj_win()
+            self.switch_to_vid()
+        elif self.auto_zad.IsChecked():
+            self.show_zad()
+
+        # Mark as playing
+        [self.grid.SetCellBackgroundColour(self.stopped_row, col, Colors.ROW_PLAYING_NOW)
+         for col in range(self.grid.GetNumberCols())]
+        wx.CallAfter(self.grid.ForceRefresh)
+
+        # Start playback with saved offset
+        stopped_offset = self.stopped_file_offset
+        def delayed_run():
+            threading.Thread(target=self.play_sync, args=(self.vol_control.GetValue(), sound_only)).start()
+            self.player_time_update_timer.Start(self.player_time_update_interval_ms)
+            # Restore playback position after brief delay for player to initialize
+            if stopped_offset is not None:
+                wx.CallLater(500, lambda: self.player.set_time(stopped_offset))
+
+        wx.CallAfter(delayed_run)
+
+        # Clear stopped state
+        self.stopped_file_offset = None
+        self.stopped_num = None
+        self.stopped_row = None
 
     def set_vol(self, e=None, vol=100):
         value = e.Int if e else vol
@@ -1143,16 +1261,33 @@ class MainWindow(wx.Frame):
     def is_playing(self):
         return self.player.get_state() in range(1, 4)  # Playing or going to play
 
+    def on_slider_click(self, e):
+        """Handle click anywhere on the slider to seek"""
+        if not (self.is_playing or self.player.get_state() == vlc.State.Paused):
+            return
+
+        # Get click position relative to slider width
+        click_x = e.GetX()
+        slider_width = self.time_bar.GetClientSize()[0]
+
+        # Calculate new position based on click location
+        if slider_width > 0:
+            ratio = click_x / slider_width
+            max_value = self.time_bar.GetMax()
+            new_value = int(ratio * max_value)
+            self.time_bar.SetValue(new_value)
+            self.player.set_time(new_value)
+
     def player_time_update(self, e=None):
         if self.is_playing:
             track_length, track_time = self.player.get_length(), self.player.get_time()
 
             if sys.platform == "win32":  # FIXME: Don't know why it does not reach the end on win32
                 gauge_length = track_length - 1000 if track_length > 1000 else track_length
-                self.time_bar.SetRange(gauge_length)
+                self.time_bar.SetMax(gauge_length)
                 self.time_bar.SetValue(track_time if track_time <= gauge_length else gauge_length)
             elif 0 <= track_time < track_length:
-                self.time_bar.SetRange(track_length)
+                self.time_bar.SetMax(track_length)
                 self.time_bar.SetValue(track_time)
 
             time_elapsed = '%02d:%02d' % divmod(track_time / 1000, 60)
@@ -1165,7 +1300,7 @@ class MainWindow(wx.Frame):
             if 'Fading' not in self.player_status:
                 self.player_status = status
         else:  # Not playing
-            self.time_bar.SetRange(1)
+            self.time_bar.SetMax(1)
             self.time_bar.SetValue(0)
             self.time_label.SetLabel('Stop')
             self.set_timecode('stop')
@@ -1177,11 +1312,11 @@ class MainWindow(wx.Frame):
                  for col in range(self.grid.GetNumberCols())]
                 wx.CallAfter(self.grid.ForceRefresh)
 
-                row = self.grid.GetGridCursorRow()
-                if row < self.grid.GetNumberRows() - 1 and row == self.current_playing_row:
+                # Move cursor to next track if available
+                if self.current_playing_row < self.grid.GetNumberRows() - 1:
                     self.current_playing_row += 1
-                    self.grid.SetGridCursor(self.current_playing_row, 0)
-                    self.grid.SelectRow(self.current_playing_row)
+                self.grid.SetGridCursor(self.current_playing_row, 0)
+                self.grid.SelectRow(self.current_playing_row)
 
             self.grid.MakeCellVisible(self.current_playing_row, 0)
             self.grid.SetFocus()

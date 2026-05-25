@@ -273,7 +273,7 @@ class BackgroundMusicWindow(wx.Frame):
 
         self.Bind(wx.EVT_CLOSE, main_window.on_bg_player_win_close)
 
-        f3_id, f4_id, shift_f4_id, esc_id, shift_esc_id = wx.NewId(), wx.NewId(), wx.NewId(), wx.NewId(), wx.NewId()
+        f3_id, f4_id, shift_f4_id, f5_id, esc_id, shift_esc_id = wx.NewId(), wx.NewId(), wx.NewId(), wx.NewId(), wx.NewId(), wx.NewId()
         self.Bind(wx.EVT_MENU, main_window.play_pause_bg, id=f3_id)
         self.Bind(wx.EVT_MENU, lambda e: main_window.background_play(from_grid=True), id=f4_id)
         self.Bind(wx.EVT_MENU, main_window.background_play, id=shift_f4_id)

@@ -95,13 +95,13 @@ class ProjectorWindow(wx.Frame):
                 width, height = self.GetSize()
                 width *= 3/4  # Assuming 4:3
                 base_size = height if height < width else width
-                font_height = base_size / 3
+                font_height = int(base_size / 3)
 
                 font = self.countdown_text.GetFont()
                 font.SetPixelSize(wx.Size(0, font_height))
                 self.countdown_text.SetFont(font)
 
-                font.SetPixelSize(wx.Size(0, font_height / 3))
+                font.SetPixelSize(wx.Size(0, int(font_height / 3)))
                 self.info_text.SetFont(font)
                 self.time_text.SetFont(font)
                 if e:
