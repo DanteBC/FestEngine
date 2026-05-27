@@ -61,6 +61,7 @@ class MainWindow(wx.Frame):
                        Config.FILES_DIRS: [""],
                        Config.BG_FADE_STOP_DELAYS: 0.03,
                        Config.BG_FADE_PAUSE_DELAYS: 0.01,
+                       Config.VLC_AOUT: "",
                        Config.C2_DATABASE_PATH: "",
                        Config.TEXT_WIN_FIELDS: ["Пожелания по сценическому свету (необязательно)"],
                        Config.COUNTDOWN_OPENING_TEXT: u"До начала фестиваля",
@@ -125,7 +126,9 @@ class MainWindow(wx.Frame):
         self.player_time_update_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.player_time_update, self.player_time_update_timer)
 
-        self.bg_player = BackgroundMusicPlayer(self)
+        bg_aout = self.config.get(Config.VLC_AOUT, '')
+        bg_args = (self.config[Config.VLC_ARGUMENTS] or '') + ((' --aout=' + bg_aout) if bg_aout else '')
+        self.bg_player = BackgroundMusicPlayer(self, bg_args)
         self.bg_player_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.on_background_timer, self.bg_player_timer)
 
@@ -430,9 +433,10 @@ class MainWindow(wx.Frame):
 
         # ----------------------- VLC ---------------------
 
-        self.vlc_instance = vlc.Instance(self.config[Config.VLC_ARGUMENTS])
+        self.player_vlc_instance = vlc.Instance(self.config[Config.VLC_ARGUMENTS])
+        self.vlc_instance = self.player_vlc_instance
 
-        self.player = self.vlc_instance.media_player_new()
+        self.player = self.player_vlc_instance.media_player_new()
         self.player.audio_set_volume(100)
         self.player.audio_set_mute(False)
 
@@ -532,7 +536,8 @@ class MainWindow(wx.Frame):
         self.on_text_win_close()
         self.on_timecode_win_close()
         self.player.stop()
-        self.vlc_instance.release()
+        self.player_vlc_instance.release()
+        self.bg_player.vlc_instance.release()
         if e:
             e.Skip()
         else:
@@ -1025,9 +1030,12 @@ class MainWindow(wx.Frame):
             self.player_status = _(u'Nothing to play for %s%s') % ('№', num)
             return
 
-        # Stop background music completely (not just pause) to avoid audio interference
+        # Fade out background music (don't stop immediately) to avoid audio interference
         if self.bg_player.player.get_state() in [vlc.State.Playing, vlc.State.Paused]:
-            self.bg_player.player.stop()
+            if getattr(self.bg_player, 'fade_in_out', False):
+                self.bg_player.fade_out_and_stop_async(self.config[Config.BG_FADE_STOP_DELAYS])
+            else:
+                self.bg_player.player.stop()
 
         self.player.set_media(self.vlc_instance.media_new(file_path))
 
@@ -1205,9 +1213,12 @@ class MainWindow(wx.Frame):
         except IndexError:
             return
 
-        # Stop background music completely (not just pause) to avoid audio interference
+        # Fade out background music (don't stop immediately) to avoid audio interference
         if self.bg_player.player.get_state() in [vlc.State.Playing, vlc.State.Paused]:
-            self.bg_player.player.stop()
+            if getattr(self.bg_player, 'fade_in_out', False):
+                self.bg_player.fade_out_and_stop_async(self.config[Config.BG_FADE_STOP_DELAYS])
+            else:
+                self.bg_player.player.stop()
 
         self.player.set_media(self.vlc_instance.media_new(file_path))
 

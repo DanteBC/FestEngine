@@ -11,12 +11,12 @@ from constants import Colors, FileTypes, Config
 
 
 class BackgroundMusicPlayer(object):
-    def __init__(self, parent):
+    def __init__(self, parent, vlc_arguments=""):
         self.main_window = parent
 
         self.timer_update_ms = 500
         self.volume = 50
-        self.vlc_instance = vlc.Instance()
+        self.vlc_instance = vlc.Instance(vlc_arguments)
         self.player = self.vlc_instance.media_player_new()
         self.player.audio_set_volume(self.volume)
         self.player.audio_set_mute(False)
@@ -122,6 +122,21 @@ class BackgroundMusicPlayer(object):
 
     def fade_out_sync(self, delay):
         self._fade_sync(range(self.volume, -1, -1), delay)
+
+    def fade_out_and_stop_async(self, delay):
+        """Fade out in a background thread and stop the player when done."""
+        threading.Thread(target=self._fade_out_and_stop_sync, args=(delay,)).start()
+
+    def _fade_out_and_stop_sync(self, delay):
+        try:
+            self.fade_out_sync(delay)
+            try:
+                self.player.stop()
+            except Exception:
+                pass
+            wx.CallAfter(lambda: self.main_window.set_bg_player_status("Background Player: Stopped"))
+        except Exception:
+            pass
 
     def play_sync(self):
         self.player.set_media(self.vlc_instance.media_new(self.playlist[self.current_track_i]['path']))

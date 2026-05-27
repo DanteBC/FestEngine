@@ -9,6 +9,7 @@ class Config:
     BG_ZAD_PATH = "Background ZAD Path"
     FILES_DIRS = "Files Dirs"
     VLC_ARGUMENTS = "VLC CLI Arguments"
+    VLC_AOUT = "VLC Audio Output"
     BG_FADE_STOP_DELAYS = "BG Player Stop Fade In/Out Delays"
     BG_FADE_PAUSE_DELAYS = "BG Player Pause Fade In/Out Delays"
     COUNTDOWN_TIME_FMT = "Countdown Time Format"

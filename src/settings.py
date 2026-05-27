@@ -46,7 +46,7 @@ class SettingsDialog(wx.Dialog):
 
         self.top_sizer.Add(wx.StaticLine(self.panel), 0, wx.ALL | wx.EXPAND, 5)
 
-        self.configs_grid = wx.FlexGridSizer(rows=5, cols=2, hgap=5, vgap=5)
+        self.configs_grid = wx.FlexGridSizer(rows=0, cols=2, hgap=5, vgap=5)
         self.configs_grid.AddGrowableCol(1)
 
         # Projector Screen Selector
@@ -84,6 +84,19 @@ class SettingsDialog(wx.Dialog):
         self.bg_zad.SetPath(path.make_abs(self.config[Config.BG_ZAD_PATH], path.fest_file))
         self.configs_grid.Add(wx.StaticText(self.panel, label=_("Background ZAD Path")), 0, wx.ALIGN_CENTER_VERTICAL)
         self.configs_grid.Add(self.bg_zad, 1, wx.EXPAND)
+
+        # VLC Audio Output
+        self.vlc_aout_display = ['Default', 'directsound', 'wasapi', 'waveout', 'alsa', 'pulse']
+        self.vlc_aout_values = ['', 'directsound', 'wasapi', 'waveout', 'alsa', 'pulse']
+        self.vlc_aout_choice = wx.Choice(self.panel)
+        self.vlc_aout_choice.SetItems(self.vlc_aout_display)
+        try:
+            sel_index = self.vlc_aout_values.index(self.config.get(Config.VLC_AOUT, ''))
+        except ValueError:
+            sel_index = 0
+        self.vlc_aout_choice.SetSelection(sel_index)
+        self.configs_grid.Add(wx.StaticText(self.panel, label=_("VLC Audio Output")), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.configs_grid.Add(self.vlc_aout_choice, 1, wx.EXPAND)
 
         self.top_sizer.Add(self.configs_grid, 0, wx.EXPAND | wx.ALL, 5)
 
@@ -246,6 +259,8 @@ class SettingsDialog(wx.Dialog):
                 _("Invalid Background ZAD Path")
             )
         )
+        # VLC aout
+        self.config[Config.VLC_AOUT] = self.vlc_aout_values[self.vlc_aout_choice.GetSelection()]
 
     def on_ok(self, e):
         fest_file_path = self.session_picker.GetPath()
