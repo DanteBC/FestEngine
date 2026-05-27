@@ -1030,12 +1030,12 @@ class MainWindow(wx.Frame):
             self.player_status = _(u'Nothing to play for %s%s') % ('№', num)
             return
 
-        # Fade out background music (don't stop immediately) to avoid audio interference
+        # Fade out background music and pause it instead of stopping to avoid audio interference
         if self.bg_player.player.get_state() in [vlc.State.Playing, vlc.State.Paused]:
             if getattr(self.bg_player, 'fade_in_out', False):
-                self.bg_player.fade_out_and_stop_async(self.config[Config.BG_FADE_STOP_DELAYS])
+                self.bg_player.fade_out_and_pause_async(self.config[Config.BG_FADE_STOP_DELAYS])
             else:
-                self.bg_player.player.stop()
+                self.bg_player.player.set_pause(True)
 
         self.player.set_media(self.vlc_instance.media_new(file_path))
 
@@ -1213,12 +1213,12 @@ class MainWindow(wx.Frame):
         except IndexError:
             return
 
-        # Fade out background music (don't stop immediately) to avoid audio interference
+        # Fade out background music and pause it instead of stopping to avoid audio interference
         if self.bg_player.player.get_state() in [vlc.State.Playing, vlc.State.Paused]:
             if getattr(self.bg_player, 'fade_in_out', False):
-                self.bg_player.fade_out_and_stop_async(self.config[Config.BG_FADE_STOP_DELAYS])
+                self.bg_player.fade_out_and_pause_async(self.config[Config.BG_FADE_STOP_DELAYS])
             else:
-                self.bg_player.player.stop()
+                self.bg_player.player.set_pause(True)
 
         self.player.set_media(self.vlc_instance.media_new(file_path))
 

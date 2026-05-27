@@ -123,18 +123,18 @@ class BackgroundMusicPlayer(object):
     def fade_out_sync(self, delay):
         self._fade_sync(range(self.volume, -1, -1), delay)
 
-    def fade_out_and_stop_async(self, delay):
-        """Fade out in a background thread and stop the player when done."""
-        threading.Thread(target=self._fade_out_and_stop_sync, args=(delay,)).start()
+    def fade_out_and_pause_async(self, delay):
+        """Fade out in a background thread and pause the player when done."""
+        threading.Thread(target=self._fade_out_and_pause_sync, args=(delay,)).start()
 
-    def _fade_out_and_stop_sync(self, delay):
+    def _fade_out_and_pause_sync(self, delay):
         try:
-            self.fade_out_sync(delay)
-            try:
-                self.player.stop()
-            except Exception:
-                pass
-            wx.CallAfter(lambda: self.main_window.set_bg_player_status("Background Player: Stopped"))
+            if self.player.get_state() == vlc.State.Playing:
+                self.fade_out_sync(delay)
+            self.player.set_pause(True)
+            if self.window:
+                wx.CallAfter(lambda: self.window.pause_btn.SetValue(True))
+            wx.CallAfter(lambda: self.main_window.set_bg_player_status("Background Player: Paused"))
         except Exception:
             pass
 
