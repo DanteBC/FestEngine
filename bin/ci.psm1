@@ -19,6 +19,7 @@ function FestEngineGetDeps {
         $env:VLC_VERSION = $env:VLC
         choco install -y --no-progress --version $env:VLC_VERSION $env:VLC_ARCH_FLAG vlc
     }
+    Write-Warning "Gathering debug info"
     choco list vlc
     Write-Warning "VLC = $env:VLC"
     Write-Warning "VLC_VERSION = $env:VLC_VERSION"
