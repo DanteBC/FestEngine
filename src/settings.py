@@ -178,6 +178,24 @@ class SettingsDialog(wx.Dialog):
         list(map(process_children, [self.configs_grid, self.pickers_sizer, self.dir_buttons_sizer]))
         self.session_file_edit_btn.Enable(enabled)
 
+    def ensure_config_defaults(self):
+        defaults = {
+            Config.PROJECTOR_SCREEN: 0,
+            Config.FILENAME_RE: r"^(?P<num>\d{1,3}[a-z]?)[\W_]{1,3}(?P<name>.*)$",
+            Config.C2_DATABASE_PATH: "",
+            Config.BG_TRACKS_DIR: "",
+            Config.BG_ZAD_PATH: "",
+            Config.FILES_DIRS: [""],
+            Config.VLC_AOUT: "",
+            Config.VLC_ARGUMENTS: "",
+            Config.TEXT_WIN_FIELDS: [],
+            Config.COUNTDOWN_OPENING_TEXT: u"",
+            Config.COUNTDOWN_INTERMISSION_TEXT: u"",
+            Config.COUNTDOWN_TIME_FMT: u""
+        }
+        for key, value in defaults.items():
+            self.config.setdefault(key, value)
+
     def on_fest_selected(self, e=None, first_run=False):
         fest_file_exists = os.path.isfile(e.Path) if e else False
         if fest_file_exists:
@@ -185,6 +203,7 @@ class SettingsDialog(wx.Dialog):
             path.fest_file = self.fest_file_path
             try:
                 self.config = json.load(open(e.Path, 'r', encoding='utf-8-sig'))
+                self.ensure_config_defaults()
             except json.decoder.JSONDecodeError as e:
                 msg = _("Unfortunately, you broke the JSON format...\n"
                         "Please fix the configuration file%s ASAP.\n\nDetails: %s") % ("", str(e))
@@ -203,13 +222,13 @@ class SettingsDialog(wx.Dialog):
             self.session_file_edit_btn.Enable(os.path.exists(self.fest_file_path))
 
     def config_to_ui(self):
-        self.screens_combobox.SetSelection(self.config[Config.PROJECTOR_SCREEN])
-        self.db_path.SetPath(path.make_abs(self.config[Config.C2_DATABASE_PATH], path.fest_file))
-        self.filename_re.SetValue(self.config[Config.FILENAME_RE])
-        self.bg_tracks.SetPath(path.make_abs(self.config[Config.BG_TRACKS_DIR], path.fest_file))
-        self.bg_zad.SetPath(path.make_abs(self.config[Config.BG_ZAD_PATH], path.fest_file))
+        self.screens_combobox.SetSelection(self.config.get(Config.PROJECTOR_SCREEN, 0))
+        self.db_path.SetPath(path.make_abs(self.config.get(Config.C2_DATABASE_PATH, ""), path.fest_file))
+        self.filename_re.SetValue(self.config.get(Config.FILENAME_RE, ""))
+        self.bg_tracks.SetPath(path.make_abs(self.config.get(Config.BG_TRACKS_DIR, ""), path.fest_file))
+        self.bg_zad.SetPath(path.make_abs(self.config.get(Config.BG_ZAD_PATH, ""), path.fest_file))
         [self.rm_dir() for i in range(len(self.dir_pickers))]
-        [self.add_dir(path.make_abs(d, path.fest_file)) for d in self.config[Config.FILES_DIRS]]
+        [self.add_dir(path.make_abs(d, path.fest_file)) for d in self.config.get(Config.FILES_DIRS, [""])]
         self.panel.SetSizerAndFit(self.top_sizer)
         self.top_sizer.Fit(self)
         self.SetClientSize((self.GetClientSize()[0] + 300, self.GetClientSize()[1]))
@@ -308,6 +327,7 @@ class SettingsDialog(wx.Dialog):
             if action == wx.ID_OK:
                 try:
                     self.config = json.load(open(config_path, 'r', encoding='utf-8-sig'))
+                    self.ensure_config_defaults()
                     self.EndModal(wx.ID_OPEN)
                 except json.decoder.JSONDecodeError as e:
                     msg = _("Unfortunately, you broke the JSON format...\n"
