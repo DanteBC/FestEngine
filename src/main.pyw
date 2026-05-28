@@ -85,9 +85,7 @@ class MainWindow(wx.Frame):
             if os.path.isfile(self.fest_file_path):
                 try:
                     loaded_config = json.load(open(self.fest_file_path, 'r', encoding='utf-8-sig'))
-                    config_keys_diff = set(base_config.keys()) - set(loaded_config.keys())
-                    if config_keys_diff:
-                        self.logger.log("[WARNING] Config file is missing the following keys: " + str(config_keys_diff))
+                    # Missing keys are filled from defaults by merge; no startup warning is needed.
                     self.config = {**base_config, **loaded_config}  # Merging base config with loaded
                     self.config_ok = True
                 except json.decoder.JSONDecodeError as e:

@@ -33,7 +33,11 @@ if sys.platform.startswith('linux'):
 
 elif sys.platform == "win32" and not args.novlc:
     if args.vlc_path:
-        vlc_path = args.vlc_path[0]
+        vlc_path = args.vlc_path
+        vlc_binaries = {'libvlc.dll': '.',
+                        'libvlccore.dll': '.',
+                        'plugins': 'plugins'}
+        vlc_binaries = {os.path.join(vlc_path, src): tgt for src, tgt in vlc_binaries.items()}
     else:   # Trying to search find VLC
         try:
             from winreg import *  # Python 3
