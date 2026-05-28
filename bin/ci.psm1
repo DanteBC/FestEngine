@@ -19,7 +19,7 @@ function FestEngineGetDeps {
         $env:VLC_VERSION = $env:VLC
         choco install -y --no-progress --version $env:VLC_VERSION $env:VLC_ARCH_FLAG vlc
     }
-    choco list vlc --local-only
+    choco list vlc
 
     $env:Path += ";$env:PYTHON_PATH\Scripts"
     & "$env:PYTHON_PATH\python.exe" -m pip install --upgrade setuptools pip wheel cython
