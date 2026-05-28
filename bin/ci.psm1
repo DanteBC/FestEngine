@@ -13,7 +13,7 @@ function FestEngineGetDeps {
         $env:PYTHON_PATH = 'C:\Python39-x64'
     }
     if ($env:VLC -eq 'latest') {
-        $env:VLC_VERSION = ((choco list vlc | Select-String -Pattern '^vlc\s+v?([\d\.]+)\s+\[Approved\]') -split ' ')[1]
+        $env:VLC_VERSION = ((choco list vlc | Select-String -Pattern '^vlc\s+([\d\.]+)') -split ' ')[1]
         choco install -y --no-progress $env:VLC_ARCH_FLAG vlc
     } else {
         $env:VLC_VERSION = $env:VLC
@@ -25,6 +25,16 @@ function FestEngineGetDeps {
     Write-Warning "VLC_VERSION = $env:VLC_VERSION"
     Write-Warning "ARCH = $env:ARCH"
     Write-Warning "VER = $env:VER"
+
+    Write-Warning "Raw choco list output:"
+    choco list vlc | ForEach-Object { Write-Host "  $_" }
+
+    # Тестируем паттерн
+    $test = choco list vlc | Select-String -Pattern '^vlc\s+([\d\.]+)'
+    Write-Warning "Match found: $($test -ne $null)"
+    if ($test) {
+        Write-Warning "Version extracted: $($test.Matches.Groups[1].Value)"
+    }
 
 
     $env:Path += ";$env:PYTHON_PATH\Scripts"
