@@ -22,7 +22,7 @@ for:
         ARCH: '64'
 
   install:
-    - sudo -H pip install --upgrade pip docker-compose
+    - sudo -H pip install --upgrade pip docker-compose-v2
   build_script:
     - ./bin/build.sh
   artifacts:
