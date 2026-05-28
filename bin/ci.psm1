@@ -13,13 +13,14 @@ function FestEngineGetDeps {
         $env:PYTHON_PATH = 'C:\Python39-x64'
     }
     if ($env:VLC -eq 'latest') {
-        $env:VLC_VERSION = ((choco list vlc | Select-String -Pattern '^vlc v?[\d\.]* \[Approved\]') -split ' ')[1]
+        $env:VLC_VERSION = ((choco list vlc | Select-String -Pattern '^vlc\s+v?([\d\.]+)\s+\[Approved\]') -split ' ')[1]
         choco install -y --no-progress $env:VLC_ARCH_FLAG vlc
     } else {
         $env:VLC_VERSION = $env:VLC
         choco install -y --no-progress --version $env:VLC_VERSION $env:VLC_ARCH_FLAG vlc
     }
     choco list vlc
+    Write-Warning "VLC = $env:VLC"
     Write-Warning "VLC_VERSION = $env:VLC_VERSION"
     Write-Warning "ARCH = $env:ARCH"
     Write-Warning "VER = $env:VER"
