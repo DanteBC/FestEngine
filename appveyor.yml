@@ -21,10 +21,21 @@ for:
       - image: Ubuntu
         ARCH: '64'
   install:
+    # Удаляем старые версии
+    - sudo pip uninstall -y docker docker-compose || true
+    # Устанавливаем Docker Compose v2
+    - sudo mkdir -p /usr/local/lib/docker/cli-plugins
+    - sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
+    - sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+    - docker compose version
+    # Устанавливаем pip пакеты
     - sudo -H pip install --upgrade pip
-    - sudo -H pip install 'docker-compose==1.29.2'
+    - sudo -H pip install 'docker==6.1.3'
   build_script:
-    - ./bin/build.sh
+    # Используем "docker compose" (без дефиса) вместо "docker-compose"
+    - docker compose up --build
+    - docker cp fest-engine:/app/bin/fest_engine.tar.gz ./bin/fest_engine-linux-x64-minimal.tar.gz
+    - docker compose down
   artifacts:
     - name: FestEngine Linux 64bit Minimal
       path: bin/fest_engine-linux-x64-minimal.tar.gz
