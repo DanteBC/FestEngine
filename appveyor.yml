@@ -21,7 +21,8 @@ for:
       - image: Ubuntu
         ARCH: '64'
   install:
-    - sudo -H pip install --upgrade pip docker-compose
+    - sudo -H pip install --upgrade pip
+    - sudo -H pip install 'docker-compose==1.29.2'
   build_script:
     - ./bin/build.sh
   artifacts:
