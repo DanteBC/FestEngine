@@ -20,9 +20,13 @@ for:
     only:
       - image: Ubuntu
         ARCH: '64'
-
   install:
-    - sudo -H pip install --upgrade pip docker-compose
+    - sudo apt-get update
+    - sudo apt-get install -y docker.io
+    - sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    - sudo chmod +x /usr/local/bin/docker-compose
+    - docker-compose --version
+    - sudo -H pip install --upgrade pip
   build_script:
     - ./bin/build.sh
   artifacts:
