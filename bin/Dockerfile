@@ -1,4 +1,4 @@
-FROM python:3.9-slim-bullseye
+FROM python:3.8-slim-bullseye
 
 RUN apt-get update && \
     apt-get upgrade -y && \
@@ -10,13 +10,12 @@ RUN apt-get update && \
         libgtk-3-dev \
         pkg-config \
         build-essential && \
-    python3 -m pip install -U pip setuptools wheel && \
-    python3 -m pip install -U typing-extensions six && \
-    python3 -m pip install -U \
-        -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/debian-11 \
+    pip install -U pip setuptools wheel && \
+    pip install -U \
         --no-cache-dir \
+        -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/debian-11 \
         wxPython && \
-    python3 -m pip install -U pyinstaller python-vlc
+    pip install -U pyinstaller python-vlc
 
 WORKDIR /app
 COPY . .
