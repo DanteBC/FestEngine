@@ -25,5 +25,9 @@ RUN python3 ./build.py -novlc && \
     mv ./install.sh ./FestEngine/ && \
     mkdir -p ./FestEngine/locale/ru/LC_MESSAGES && \
     msgfmt -o ./FestEngine/locale/ru/LC_MESSAGES/main.mo \
+RUN python3 ./build.py -novlc && \
+    mv ./install.sh ./FestEngine/ && \
+    mkdir -p ./FestEngine/locale/ru/LC_MESSAGES && \
+    msgfmt -o ./FestEngine/locale/ru/LC_MESSAGES/main.mo \
            ../src/locale/ru/LC_MESSAGES/main.po
 RUN tar -zcvf fest_engine.tar.gz FestEngine
