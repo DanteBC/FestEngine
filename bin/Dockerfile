@@ -1,4 +1,4 @@
-FROM python:3.8-slim-bullseye
+FROM ubuntu:20.04
 
 RUN apt-get update && \
     apt-get upgrade -y && \
@@ -9,13 +9,15 @@ RUN apt-get update && \
         zlib1g-dev \
         libgtk-3-dev \
         pkg-config \
-        build-essential && \
-    pip install -U pip setuptools wheel && \
-    pip install -U \
+        build-essential \
+        python3 \
+        python3-pip && \
+    python3 -m pip install -U pip setuptools wheel && \
+    python3 -m pip install -U \
         --no-cache-dir \
-        -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/debian-11 \
+        -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-20.04 \
         wxPython && \
-    pip install -U pyinstaller python-vlc
+    python3 -m pip install -U pyinstaller python-vlc
 
 WORKDIR /app
 COPY . .
