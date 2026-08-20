@@ -27,6 +27,7 @@ from file_replacer import FileReplacer
 from text_window import TextWindow
 from os_tools import path
 from timecode_window import TimecodeWindow
+from api_server import APIServer
 
 locale_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'locale')
 if os.path.isfile(os.path.join(locale_dir, 'ru', 'LC_MESSAGES', 'main.mo')):
@@ -49,6 +50,22 @@ class MainWindow(wx.Frame):
         wx.Frame.__init__(self, parent, title=title, size=(800, 400))
         self.Bind(wx.EVT_CLOSE, self.on_close, self)
         self.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_FRAMEBK))
+
+        self.logger = Logger(self)
+
+        if getattr(sys, 'frozen', False):
+            # Running as a bundled executable
+            # PyInstaller puts data files in a temporary folder or relative to the exe
+            # 'festengine.ico' is bundled at the root of the executable's content.
+            icon_path = os.path.join(sys._MEIPASS, 'festengine.ico') if hasattr(sys, '_MEIPASS') else 'festengine.ico'
+        else:
+            # Running in development mode
+            icon_path = path.make_abs('festengine.ico')
+
+        if os.path.exists(icon_path):
+            self.SetIcon(wx.Icon(icon_path))
+        else:
+            self.logger.log(f"[WARNING] Icon file not found at: {icon_path}")
 
         self.player_time_update_interval_ms = 300
         self.fade_out_delays_ms = 10
@@ -222,6 +239,14 @@ class MainWindow(wx.Frame):
         self.text_win_full_info.Enable(False)
         self.timecode_win_show_item = text_win_menu.Append(wx.ID_ANY, _("Show &Timecode Window"), kind=wx.ITEM_CHECK)
         self.Bind(wx.EVT_MENU, self.timecode_win_show, self.timecode_win_show_item)
+
+        # API Server
+        text_win_menu.AppendSeparator()
+        self.api_server_enabled_item = text_win_menu.Append(wx.ID_ANY, _("Enable &API Server"), kind=wx.ITEM_CHECK)
+        self.Bind(wx.EVT_MENU, self.toggle_api_server, self.api_server_enabled_item)
+        
+        self.api_server_log_item = text_win_menu.Append(wx.ID_ANY, _("Enable API &Logging"), kind=wx.ITEM_CHECK)
+        self.Bind(wx.EVT_MENU, self.toggle_api_logging, self.api_server_log_item)
 
         def on_full_info_switch(e):
             if self.text_win:
@@ -451,6 +476,8 @@ class MainWindow(wx.Frame):
         self.Show(True)
         self.grid.SetFocus()
 
+        self.api_server = None
+
         def init():
             if not self.config_ok:
                 self.on_settings()
@@ -530,6 +557,7 @@ class MainWindow(wx.Frame):
     # -------------------------------------------------- Actions --------------------------------------------------
 
     def on_close(self, e=None):
+        self.api_server.join(timeout=1)
         self.destroy_proj_win()
         self.on_text_win_close()
         self.on_timecode_win_close()
@@ -1444,6 +1472,42 @@ class MainWindow(wx.Frame):
         bg_started = self.play_pause_bg()
         if bg_started and self.end_show_on_bg.IsChecked():
             self.end_show()
+
+    # -------------------------------------------------- API Server --------------------------------------------------
+
+    def toggle_api_server(self, e):
+        enabled = e.IsChecked()
+        if enabled:
+            # Simple config for now, could be expanded
+            extra_cols = []
+            
+            # Ask user for extra columns
+            if self.grid_cols and len(self.grid_cols) > 1:
+                # Exclude the first column (NUM)
+                selectable_cols = self.grid_cols[1:]
+                dlg = wx.MultiChoiceDialog(self, _("Select columns to include in API response:"),
+                                         _("API Columns"), selectable_cols)
+                if dlg.ShowModal() == wx.ID_OK:
+                    extra_cols = [selectable_cols[i] for i in dlg.GetSelections()]
+                dlg.Destroy()
+
+            self.api_server = APIServer(self, port=8000, 
+                                        log_enabled=self.api_server_log_item.IsChecked(),
+                                        extra_columns=extra_cols)
+            self.api_server.start()
+            self.status("API Server Started on port 8000")
+        else:
+            if self.api_server:
+                self.api_server.stop()
+                self.api_server.join()
+                self.api_server = None
+                self.status("API Server Stopped")
+
+    def toggle_api_logging(self, e):
+        enabled = e.IsChecked()
+        if self.api_server:
+            self.api_server.log_enabled = enabled
+            self.status(f"API Logging {'Enabled' if enabled else 'Disabled'}")
 
     # -------------------------------------------------- Text Window --------------------------------------------------
 
