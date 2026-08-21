@@ -86,10 +86,6 @@ class APIServer(threading.Thread):
     def stop(self):
         self._shutdown_event.set()
         if self.httpd:
-            # Shutdown the server and force close the socket
-            try:
-                self.httpd.socket.close()
-            except:
-                pass
+            self.httpd.shutdown()
             self.httpd.server_close()
             self.httpd = None
