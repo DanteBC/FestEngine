@@ -17,6 +17,8 @@ class Config:
     TEXT_WIN_FIELDS = "Main Fields in Text Window"
     COUNTDOWN_OPENING_TEXT = "Countdown Opening Text"
     COUNTDOWN_INTERMISSION_TEXT = "Countdown Intermission Text"
+    API_POST_ENABLED = "API Post Enabled"
+    API_POST_URL = "API Post URL"
 
 
 class Columns:

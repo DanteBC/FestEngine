@@ -10,7 +10,7 @@ sources_path = os.path.join('..', 'src')
 main_file = 'main.pyw'
 appimage_excludelist_url = 'https://raw.githubusercontent.com/AppImage/AppImages/master/excludelist'
 
-pyinst_flags = ['--clean', '-y', main_file]
+pyinst_flags = ['--clean', '-y', main_file, '--icon', os.path.join(sources_path, 'festengine.ico')]
 
 parser = argparse.ArgumentParser()
 parser.add_argument('vlc_path', nargs='?')
@@ -73,6 +73,7 @@ hidden_imports = sum((['--hidden-import', i] for i in hidden_imports), [])
 pyinst_cmd = [sys.executable, '-m', 'PyInstaller', '-n', name, '--distpath', dist_path] + vlc_binaries + hidden_imports + pyinst_flags
 
 print("Running:", " ".join(pyinst_cmd))
+print(f"DEBUG: Icon path passed to PyInstaller: {os.path.join(sources_path, 'festengine.ico')}")
 
 p = subprocess.Popen(pyinst_cmd, stderr=subprocess.STDOUT)
 

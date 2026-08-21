@@ -98,6 +98,17 @@ class SettingsDialog(wx.Dialog):
         self.configs_grid.Add(wx.StaticText(self.panel, label=_("VLC Audio Output")), 0, wx.ALIGN_CENTER_VERTICAL)
         self.configs_grid.Add(self.vlc_aout_choice, 1, wx.EXPAND)
 
+        # API Post
+        self.api_post_enabled = wx.CheckBox(self.panel, label=_("Enable API Post"))
+        self.api_post_enabled.SetValue(self.config.get(Config.API_POST_ENABLED, False))
+        self.configs_grid.Add(self.api_post_enabled, 0, wx.ALIGN_CENTER_VERTICAL)
+        self.configs_grid.Add(wx.StaticText(self.panel, label=""), 0) # Placeholder for alignment
+        
+        self.api_post_url = wx.TextCtrl(self.panel)
+        self.api_post_url.SetValue(self.config.get(Config.API_POST_URL, ""))
+        self.configs_grid.Add(wx.StaticText(self.panel, label=_("API Post URL")), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.configs_grid.Add(self.api_post_url, 1, wx.EXPAND)
+
         self.top_sizer.Add(self.configs_grid, 0, wx.EXPAND | wx.ALL, 5)
 
         # --- Dirs ---
@@ -280,6 +291,10 @@ class SettingsDialog(wx.Dialog):
         )
         # VLC aout
         self.config[Config.VLC_AOUT] = self.vlc_aout_values[self.vlc_aout_choice.GetSelection()]
+        
+        # API Post
+        self.config[Config.API_POST_ENABLED] = self.api_post_enabled.IsChecked()
+        self.config[Config.API_POST_URL] = self.api_post_url.GetValue()
 
     def on_ok(self, e):
         fest_file_path = self.session_picker.GetPath()
