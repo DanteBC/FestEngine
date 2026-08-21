@@ -557,7 +557,8 @@ class MainWindow(wx.Frame):
     # -------------------------------------------------- Actions --------------------------------------------------
 
     def on_close(self, e=None):
-        self.api_server.join(timeout=1)
+        if self.api_server:
+            self.api_server.join(timeout=1)
         self.destroy_proj_win()
         self.on_text_win_close()
         self.on_timecode_win_close()
@@ -849,6 +850,17 @@ class MainWindow(wx.Frame):
 
         if self.grid.GetColLabelValue(e.Col) == Columns.NOTES:
             note = self.grid.GetCellValue(e.Row, e.Col)
+            
+            # --- API POST LOGIC ---
+            num = int(self.grid.GetCellValue(e.Row, self.grid_cols.index(Columns.NUM)))
+            if 'skip' in note.lower() or 'пропуск' in note.lower():
+                self.send_api_request({'num': num, 'action': 'skipped'})
+            elif not note:
+                # Assuming empty note means unskipped if it was previously skipped
+                # This might need better state tracking
+                self.send_api_request({'num': num, 'action': 'unskipped'})
+            # ----------------------
+
             match = re.search('>(\d{3}(\w)?)([^\w].*)?', note)  # ">234" or ">305a" or ">152a maybe"
             if match:
                 new_num, _, note = match.groups()
@@ -871,6 +883,10 @@ class MainWindow(wx.Frame):
                     self.grid.InsertRows(new_row, 1)
                 else:
                     new_row = nums.index(new_num)  # Updating
+                
+                # --- API POST LOGIC for move ---
+                self.send_api_request({'num': num, 'action': 'moved', 'new_pos_num': row[Columns.NUM]['val']})
+                # -------------------------------
 
                 for cell in row.values():
                     self.grid.SetCellValue(new_row, cell['col'], cell['val'])
@@ -901,7 +917,19 @@ class MainWindow(wx.Frame):
 
     def del_row(self, e=None):
         row = self.grid.GetGridCursorRow()
-        if self.row_type(row) != 'track':  # Extra check, this method is very dangerous.
+        if self.row_type(row) == 'dup':
+            # Logic to find original row and unmoved
+            original_num = self.get_num(row)
+            # Find the row with original_num
+            for r in range(self.grid.GetNumberRows()):
+                if self.grid.GetCellValue(r, self.grid_cols.index(Columns.NUM)) == original_num and self.row_type(r) == 'track':
+                    # Clear notes
+                    self.grid.SetCellValue(r, self.grid_cols.index(Columns.NOTES), "")
+                    # Send API
+                    self.send_api_request({'num': int(original_num), 'action': 'unmoved'})
+                    break
+            self.grid.DeleteRows(row)
+        elif self.row_type(row) != 'track':  # Extra check, this method is very dangerous.
             self.grid.DeleteRows(row)
 
     def set_cell_readonly(self, row, col, force_readonly=False):
@@ -1078,6 +1106,7 @@ class MainWindow(wx.Frame):
         wx.CallAfter(self.grid.ForceRefresh)
 
         def delayed_run():
+            self.send_api_request({'num': int(num), 'action': 'current'})
             threading.Thread(target=self.play_sync, args=(self.vol_control.GetValue(), sound_only)).start()
             self.player_time_update_timer.Start(self.player_time_update_interval_ms)
 
@@ -1262,6 +1291,7 @@ class MainWindow(wx.Frame):
         # Start playback with saved offset
         stopped_offset = self.stopped_file_offset
         def delayed_run():
+            self.send_api_request({'num': int(num), 'action': 'current'})
             threading.Thread(target=self.play_sync, args=(self.vol_control.GetValue(), sound_only)).start()
             self.player_time_update_timer.Start(self.player_time_update_interval_ms)
             # Restore playback position after brief delay for player to initialize
@@ -1573,6 +1603,30 @@ class MainWindow(wx.Frame):
     def set_timecode(self, plain_text='', bold_text=''):
         if self.timecode_win:
             self.timecode_win.set_text(plain_text, bold_text)
+
+    def send_api_request(self, data):
+        url = self.config.get(Config.API_POST_URL, "")
+        if not self.config.get(Config.API_POST_ENABLED, False) or not url:
+            return
+
+        if url.lower() == 'debug':
+            self.logger.log(f"[API DEBUG] Data: {json.dumps(data)}")
+            return
+
+        def _send():
+            try:
+                import urllib.request
+                import json
+                
+                req = urllib.request.Request(url,
+                                             data=json.dumps(data).encode('utf-8'),
+                                             headers={'Content-Type': 'application/json'})
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    pass # Just sending, not handling response
+            except Exception as e:
+                self.logger.log(f"[API ERROR] Failed to send POST request: {e}")
+
+        threading.Thread(target=_send).start()
 
 
 if __name__ == "__main__":
