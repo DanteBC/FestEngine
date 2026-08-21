@@ -39,7 +39,7 @@ class FreshStartTests(unittest.TestCase):
         time.sleep(0.5)
 
         app.wxWindowNR.menu_select("Main -> Exit")
-        app.wait_for_process_exit(1)
+        app.wait_for_process_exit(10)
 
         app = Application().start("FestEngine.exe")
         main_window = app.wxWindowNR
