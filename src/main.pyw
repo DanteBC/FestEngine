@@ -852,7 +852,7 @@ class MainWindow(wx.Frame):
             note = self.grid.GetCellValue(e.Row, e.Col)
             
             # --- API POST LOGIC ---
-            num = int(self.grid.GetCellValue(e.Row, self.grid_cols.index(Columns.NUM)))
+            num = self.grid.GetCellValue(e.Row, self.grid_cols.index(Columns.NUM))
             if 'skip' in note.lower() or 'пропуск' in note.lower():
                 self.send_api_request({'num': num, 'action': 'skipped'})
             elif not note:
@@ -926,7 +926,7 @@ class MainWindow(wx.Frame):
                     # Clear notes
                     self.grid.SetCellValue(r, self.grid_cols.index(Columns.NOTES), "")
                     # Send API
-                    self.send_api_request({'num': int(original_num), 'action': 'unmoved'})
+                    self.send_api_request({'num': original_num, 'action': 'unmoved'})
                     break
             self.grid.DeleteRows(row)
         elif self.row_type(row) != 'track':  # Extra check, this method is very dangerous.
@@ -1106,7 +1106,7 @@ class MainWindow(wx.Frame):
         wx.CallAfter(self.grid.ForceRefresh)
 
         def delayed_run():
-            self.send_api_request({'num': int(num), 'action': 'current'})
+            self.send_api_request({'num': num, 'action': 'current'})
             threading.Thread(target=self.play_sync, args=(self.vol_control.GetValue(), sound_only)).start()
             self.player_time_update_timer.Start(self.player_time_update_interval_ms)
 
@@ -1291,7 +1291,7 @@ class MainWindow(wx.Frame):
         # Start playback with saved offset
         stopped_offset = self.stopped_file_offset
         def delayed_run():
-            self.send_api_request({'num': int(num), 'action': 'current'})
+            self.send_api_request({'num': num, 'action': 'current'})
             threading.Thread(target=self.play_sync, args=(self.vol_control.GetValue(), sound_only)).start()
             self.player_time_update_timer.Start(self.player_time_update_interval_ms)
             # Restore playback position after brief delay for player to initialize
