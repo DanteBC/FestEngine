@@ -18,7 +18,7 @@ for:
 -
   matrix:
     only:
-      - image: Ubuntu
+      - image: Ubuntu2204
         ARCH: '64'
   install:
     # Системные зависимости
