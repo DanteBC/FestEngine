@@ -22,7 +22,9 @@ for:
         ARCH: '64'
   install:
     # Системные зависимости
-    - sudo apt-get update
+    - sudo apt-get clean
+    - sudo apt-get update --fix-missing
+    - sudo apt-get install -y --fix-broken
     - sudo apt-get install -y \
         gettext \
         vlc \
