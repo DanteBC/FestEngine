@@ -22,7 +22,6 @@ for:
         ARCH: '64'
   install:
     # Системные зависимости
-install:
     - sudo apt clean
     - sudo apt update --fix-missing
     - sudo apt install -y --fix-broken
