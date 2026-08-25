@@ -21,26 +21,50 @@ for:
       - image: Ubuntu
         ARCH: '64'
   install:
-    # Удаляем старые версии
-    - sudo pip uninstall -y docker docker-compose || true
-    # Устанавливаем Docker Compose v2 как плагин
-    - sudo mkdir -p /usr/local/lib/docker/cli-plugins
-    - sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
-    - sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-    # Устанавливаем pip пакеты
-    - sudo -H pip install --upgrade pip
-    - sudo -H pip install 'docker==6.1.3'
+    # Системные зависимости
+    - sudo apt-get update
+    - sudo apt-get install -y \
+        gettext \
+        vlc \
+        libjpeg-dev \
+        zlib1g-dev \
+        libgtk-3-dev \
+        pkg-config \
+        build-essential \
+        python3 \
+        python3-pip \
+        python3-venv
+    
+    # Создаем виртуальное окружение (для кэширования)
+    - python3 -m venv venv
+    - source venv/bin/activate
+    
+    # Обновляем pip
+    - pip install --upgrade pip setuptools wheel
+    
+    # Устанавливаем wxPython (обязательно!)
+    - pip install --no-cache-dir -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 wxPython
+    
+    # Остальные зависимости
+    - pip install pyinstaller python-vlc numpy
 
   build_script:
-    # Меняем build.sh или используем команду напрямую
-    - docker compose -f bin/docker-compose.yml up --build
-    - docker cp fest-engine:/app/bin/fest_engine.tar.gz ./bin/fest_engine-linux-x64-minimal.tar.gz
-    - docker compose -f bin/docker-compose.yml down
+    - source venv/bin/activate
+    - cd bin
+    - python3 build.py -novlc
+    - mkdir -p ./FestEngine/locale/ru/LC_MESSAGES
+    - msgfmt -o ./FestEngine/locale/ru/LC_MESSAGES/main.mo ../src/locale/ru/LC_MESSAGES/main.po
+    - tar -zcvf fest_engine-linux-x64-minimal.tar.gz FestEngine
+    - cd ..
+
   artifacts:
     - name: FestEngine Linux 64bit Minimal
       path: bin/fest_engine-linux-x64-minimal.tar.gz
 
--
+  cache:
+    - venv
+    - /home/runner/.cache/pip
+  -
   matrix:
     only:
       - image: Visual Studio 2019
