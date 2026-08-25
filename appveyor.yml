@@ -35,7 +35,7 @@ for:
     - pip install --upgrade pip setuptools wheel
     
     # Устанавливаем wxPython (обязательно!)
-    - pip install --no-cache-dir --prefer-wheel -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 wxpython==4.2.5
+    - pip install --no-cache-dir -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 wxpython==4.2.5
     # Остальные зависимости
     - pip install pyinstaller python-vlc numpy
 
