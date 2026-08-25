@@ -2,7 +2,7 @@ clone_depth: 1
 skip_branch_with_pr: true
 image:
     - Visual Studio 2019
-    - Ubuntu
+    - Ubuntu2204
 environment:
   APPVEYOR_RDP_PASSWORD:
     secure: MPAYz75AKBf954hdYvzz2VoCxy5RJLBdg0fajQ1SQUU=
