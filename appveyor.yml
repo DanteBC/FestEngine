@@ -25,10 +25,10 @@ for:
     - sudo apt clean
     - sudo apt update --fix-missing
     - sudo apt install -y --fix-broken
-    - sudo apt install -y gettext vlc libjpeg-dev zlib1g-dev libgtk-3-dev pkg-config build-essential python3 python3-pip python3-venv
+    - sudo apt install -y gettext vlc libjpeg-dev zlib1g-dev libgtk-3-dev pkg-config build-essential python3.10 python3.10-venv python3.10-dev
       
     # Создаем виртуальное окружение (для кэширования)
-    - python3 -m venv venv
+    - python3.10 -m venv venv
     - source venv/bin/activate
     
     # Обновляем pip
