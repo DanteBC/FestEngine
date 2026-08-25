@@ -1,7 +1,7 @@
 pushd FestEngine
 
-del libvlc*
-rd /S /Q plugins
+del _internal\libvlc*
+rd /S /Q _internal\plugins
 
 copy "..\Install.bat" "Install.bat"
 
