@@ -64,7 +64,7 @@ for:
   cache:
     - venv
     - /home/runner/.cache/pip
-  -
+-
   matrix:
     only:
       - image: Visual Studio 2019
