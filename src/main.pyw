@@ -388,6 +388,8 @@ class MainWindow(wx.Frame):
         self.grid.DisableDragRowSize()
         self.grid.SetColLabelSize(20)
         self.grid.SetSelectionMode(wx.grid.Grid.GridSelectRows)
+        # in case of wxPython 4.2.X comment next line to use older style of labels
+        #self.grid.SetUseNativeColLabels(True)
 
         def select_row(e):
             if not e.Selecting() or hasattr(e, 'TopRow') and e.TopRow == e.BottomRow:
