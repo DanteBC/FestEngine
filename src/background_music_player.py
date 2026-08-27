@@ -72,11 +72,11 @@ class BackgroundMusicPlayer(object):
             return
         if self.current_track_i >= 0:
             if self.player.get_state() in {vlc.State.Playing, vlc.State.Paused}:
-                self.playlist[self.current_track_i]['color'] = Colors.ROW_SKIPPED
+                self.playlist[self.current_track_i]['color'] = self.main_window.colors.ROW_SKIPPED
                 if self.fade_in_out and self.player.get_state() == vlc.State.Playing:
                     self.fade_out_sync(self.main_window.config[Config.BG_FADE_STOP_DELAYS])  # Blocks thread
             else:
-                self.playlist[self.current_track_i]['color'] = Colors.ROW_PLAYED_TO_END
+                self.playlist[self.current_track_i]['color'] = self.main_window.colors.ROW_PLAYED_TO_END
         if self.window:
             self.window.grid.SetCellBackgroundColour(self.current_track_i, 0,
                                                      self.playlist[self.current_track_i]['color'])
@@ -152,13 +152,13 @@ class BackgroundMusicPlayer(object):
             wx.CallAfter(lambda: self.main_window.set_bg_player_status(status))
             time.sleep(0.005)
 
-        self.playlist[self.current_track_i]['color'] = Colors.ROW_PLAYING_NOW
+        self.playlist[self.current_track_i]['color'] = self.main_window.colors.ROW_PLAYING_NOW
 
         if self.window:
             def ui_upd():
                 self.window.pause_btn.Enable(True)
                 self.window.lock_btn.Enable(True)
-                self.window.grid.SetCellBackgroundColour(self.current_track_i, 0, Colors.ROW_PLAYING_NOW)
+                self.window.grid.SetCellBackgroundColour(self.current_track_i, 0, self.main_window.colors.ROW_PLAYING_NOW)
                 self.window.grid.ForceRefresh()  # Updates colors
                 self.window.pause_btn.SetValue(False)
 

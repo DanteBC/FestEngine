@@ -109,6 +109,11 @@ class SettingsDialog(wx.Dialog):
         self.configs_grid.Add(wx.StaticText(self.panel, label=_("API Post URL")), 0, wx.ALIGN_CENTER_VERTICAL)
         self.configs_grid.Add(self.api_post_url, 1, wx.EXPAND)
 
+        # Theme Selection
+        self.theme_radio = wx.RadioBox(self.panel, label=_("Theme"), choices=[_("Light"), _("Dark")], majorDimension=2, style=wx.RA_SPECIFY_COLS)
+        self.configs_grid.Add(wx.StaticText(self.panel, label=_("Theme")), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.configs_grid.Add(self.theme_radio, 1, wx.EXPAND)
+
         self.top_sizer.Add(self.configs_grid, 0, wx.EXPAND | wx.ALL, 5)
 
         # --- Dirs ---
@@ -202,7 +207,8 @@ class SettingsDialog(wx.Dialog):
             Config.TEXT_WIN_FIELDS: [],
             Config.COUNTDOWN_OPENING_TEXT: u"",
             Config.COUNTDOWN_INTERMISSION_TEXT: u"",
-            Config.COUNTDOWN_TIME_FMT: u""
+            Config.COUNTDOWN_TIME_FMT: u"",
+            Config.THEME: "light"
         }
         for key, value in defaults.items():
             self.config.setdefault(key, value)
@@ -240,6 +246,11 @@ class SettingsDialog(wx.Dialog):
         self.bg_zad.SetPath(path.make_abs(self.config.get(Config.BG_ZAD_PATH, ""), path.fest_file))
         [self.rm_dir() for i in range(len(self.dir_pickers))]
         [self.add_dir(path.make_abs(d, path.fest_file)) for d in self.config.get(Config.FILES_DIRS, [""])]
+        
+        # Theme
+        theme = self.config.get(Config.THEME, "light")
+        self.theme_radio.SetSelection(0 if theme == "light" else 1)
+        
         self.panel.SetSizerAndFit(self.top_sizer)
         self.top_sizer.Fit(self)
         self.SetClientSize((self.GetClientSize()[0] + 300, self.GetClientSize()[1]))
@@ -295,6 +306,9 @@ class SettingsDialog(wx.Dialog):
         # API Post
         self.config[Config.API_POST_ENABLED] = self.api_post_enabled.IsChecked()
         self.config[Config.API_POST_URL] = self.api_post_url.GetValue()
+        
+        # Theme
+        self.config[Config.THEME] = "light" if self.theme_radio.GetSelection() == 0 else "dark"
 
     def on_ok(self, e):
         fest_file_path = self.session_picker.GetPath()

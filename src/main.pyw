@@ -48,6 +48,7 @@ if sys.platform.startswith('linux'):
 class MainWindow(wx.Frame):
     def __init__(self, parent, title):
         wx.Frame.__init__(self, parent, title=title, size=(800, 400))
+        self.colors = Colors() # Instantiate Colors
         self.Bind(wx.EVT_CLOSE, self.on_close, self)
         self.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_FRAMEBK))
 
@@ -389,7 +390,7 @@ class MainWindow(wx.Frame):
         self.grid.SetColLabelSize(20)
         self.grid.SetSelectionMode(wx.grid.Grid.GridSelectRows)
         # in case of wxPython 4.2.X comment next line to use older style of labels
-        #self.grid.SetUseNativeColLabels(True)
+        self.grid.SetUseNativeColLabels(True)
 
         def select_row(e):
             if not e.Selecting() or hasattr(e, 'TopRow') and e.TopRow == e.BottomRow:
@@ -892,7 +893,7 @@ class MainWindow(wx.Frame):
 
                 for cell in row.values():
                     self.grid.SetCellValue(new_row, cell['col'], cell['val'])
-                    self.grid.SetCellBackgroundColour(new_row, cell['col'], Colors.DUP_ROW)
+                    self.grid.SetCellBackgroundColour(new_row, cell['col'], self.colors.DUP_ROW)
                     self.set_cell_readonly(new_row, cell['col'], True)
 
         self.grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED, self.on_grid_cell_changed)
@@ -953,7 +954,7 @@ class MainWindow(wx.Frame):
         self.grid.SetCellValue(row_pos, self.grid_cols.index(Columns.NOTES), "30m")  # Can be 15:35
 
         for col in range(self.grid.GetNumberCols()):
-            self.grid.SetCellBackgroundColour(row_pos, col, Colors.COUNTDOWN_ROW)
+            self.grid.SetCellBackgroundColour(row_pos, col, self.colors.COUNTDOWN_ROW)
             self.set_cell_readonly(row_pos, col)
 
         self.grid.SelectRow(row_pos)
@@ -977,7 +978,7 @@ class MainWindow(wx.Frame):
             self.search_box.SetForegroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOWTEXT))
             self.in_search = True
             self.grid_push()
-            self.grid.SetDefaultCellBackgroundColour(Colors.FILTERED_GRID)
+            self.grid.SetDefaultCellBackgroundColour(self.colors.FILTERED_GRID)
             self.grid.ForceRefresh()  # Updates colors
         if e:
             e.Skip()
@@ -1103,7 +1104,7 @@ class MainWindow(wx.Frame):
 
         self.num_in_player = num
         self.current_playing_row = self.grid.GetGridCursorRow()
-        [self.grid.SetCellBackgroundColour(self.current_playing_row, col, Colors.ROW_PLAYING_NOW)
+        [self.grid.SetCellBackgroundColour(self.current_playing_row, col, self.colors.ROW_PLAYING_NOW)
          for col in range(self.grid.GetNumberCols())]
         wx.CallAfter(self.grid.ForceRefresh)
 
@@ -1165,7 +1166,7 @@ class MainWindow(wx.Frame):
         self.fade_out_btn.Enable(False)
 
         if self.current_playing_row is not None:
-            [self.grid.SetCellBackgroundColour(self.current_playing_row, col, Colors.ROW_SKIPPED)
+            [self.grid.SetCellBackgroundColour(self.current_playing_row, col, self.colors.ROW_SKIPPED)
              for col in range(self.grid.GetNumberCols())]
             wx.CallAfter(self.grid.ForceRefresh)
 
@@ -1286,12 +1287,13 @@ class MainWindow(wx.Frame):
             self.show_zad()
 
         # Mark as playing
-        [self.grid.SetCellBackgroundColour(self.stopped_row, col, Colors.ROW_PLAYING_NOW)
+        [self.grid.SetCellBackgroundColour(self.stopped_row, col, self.colors.ROW_PLAYING_NOW)
          for col in range(self.grid.GetNumberCols())]
         wx.CallAfter(self.grid.ForceRefresh)
 
         # Start playback with saved offset
         stopped_offset = self.stopped_file_offset
+        num = self.num_in_player
         def delayed_run():
             self.send_api_request({'num': num, 'action': 'current'})
             threading.Thread(target=self.play_sync, args=(self.vol_control.GetValue(), sound_only)).start()
@@ -1376,8 +1378,8 @@ class MainWindow(wx.Frame):
             self.player_status = self.player_state_parse(self.player.get_state())
             self.switch_to_zad()
 
-            if self.grid.GetCellBackgroundColour(self.current_playing_row, 0) != Colors.ROW_SKIPPED:
-                [self.grid.SetCellBackgroundColour(self.current_playing_row, col, Colors.ROW_PLAYED_TO_END)
+            if self.grid.GetCellBackgroundColour(self.current_playing_row, 0) != self.colors.ROW_SKIPPED:
+                [self.grid.SetCellBackgroundColour(self.current_playing_row, col, self.colors.ROW_PLAYED_TO_END)
                  for col in range(self.grid.GetNumberCols())]
                 wx.CallAfter(self.grid.ForceRefresh)
 
@@ -1459,7 +1461,7 @@ class MainWindow(wx.Frame):
             self.bg_player.window.time_slider.SetValue(pos)
             self.bg_player.window.time_label.SetLabel(time_remaining)
             if seeking_time:
-                self.bg_player.window.time_label.SetBackgroundColour(Colors.ROW_PLAYING_NOW)
+                self.bg_player.window.time_label.SetBackgroundColour(self.colors.ROW_PLAYING_NOW)
             else:
                 self.bg_player.window.time_label.SetBackgroundColour(
                     wx.SystemSettings.GetColour(wx.SYS_COLOUR_FRAMEBK))
@@ -1632,6 +1634,35 @@ class MainWindow(wx.Frame):
 
 
 if __name__ == "__main__":
+    # --- Early Config Loading ---
+    base_config = {Config.THEME: "light"} # Minimal base for theme detection
+    config = base_config
+    if os.path.isfile(Config.LAST_SESSION_PATH):
+        try:
+            fest_file_path = open(Config.LAST_SESSION_PATH, 'r', encoding='utf-8-sig').read()
+            fest_file_path = path.make_abs(fest_file_path)
+            if os.path.isfile(fest_file_path):
+                loaded_config = json.load(open(fest_file_path, 'r', encoding='utf-8-sig'))
+                config = {**base_config, **loaded_config}
+        except Exception:
+            pass
+
     app = wx.App(False if len(sys.argv) > 1 and sys.argv[1] == '-v' else True)
+    
+    # Enable Theme support based on config
+    theme = config.get(Config.THEME, "light")
+    
+    if theme == "dark":
+        if hasattr(app, 'SetAppearance'):
+            app.SetAppearance(wx.App.Appearance.Dark)
+        
+        # MSW specific dark mode forcing
+        if hasattr(app, 'MSWEnableDarkMode'):
+            app.MSWEnableDarkMode(wx.App.DarkMode_Always)
+    else:
+        # Explicitly set light mode if 'light' is selected or default
+        if hasattr(app, 'SetAppearance'):
+             app.SetAppearance(wx.App.Appearance.Light)
+
     frame = MainWindow(None, Strings.APP_NAME)
     app.MainLoop()
