@@ -1,7 +1,7 @@
 clone_depth: 1
 skip_branch_with_pr: true
 image:
-    - Visual Studio 2026
+    - Visual Studio 2022
     - Ubuntu2204
 environment:
   APPVEYOR_RDP_PASSWORD:
@@ -58,7 +58,7 @@ for:
 -
   matrix:
     only:
-      - image: Visual Studio 2026
+      - image: Visual Studio 2022
 
 # init:
 #  - ps: iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
