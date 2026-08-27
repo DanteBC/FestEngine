@@ -7,10 +7,10 @@ function FestEngineGetDeps {
         $env:VER = $env:APPVEYOR_REPO_COMMIT.substring(0,7)
     }
     if ($env:ARCH -eq '32') {
-        $env:PYTHON_PATH = 'C:\Python39'
+        $env:PYTHON_PATH = 'C:\C:\Python314'
         $env:VLC_ARCH_FLAG = '--x86'
     } else {
-        $env:PYTHON_PATH = 'C:\Python39-x64'
+        $env:PYTHON_PATH = 'C:\Python314-x64'
     }
     if ($env:VLC -eq 'latest') {
         choco install -y --no-progress $env:VLC_ARCH_FLAG vlc
