@@ -53,11 +53,12 @@ class Colors:
     @property
     def DUP_ROW(self): return Colors.get((128, 255, 255), (60, 100, 100))
     @property
-    def COUNTDOWN_ROW(self): return Colors.get((128, 255, 200), (60, 100, 80))
+#    def COUNTDOWN_ROW(self): return Colors.get((128, 255, 200), (60, 100, 80))
+    def COUNTDOWN_ROW(self): return Colors.get((128, 255, 200), (80, 120, 100))
     @property
     def FILTERED_GRID(self): return Colors.get((255, 255, 200), (100, 100, 60))
     @property
-    def ROW_PLAYING_NOW(self): return Colors.get((200, 200, 255), (80, 80, 120))
+    def ROW_PLAYING_NOW(self): return Colors.get((200, 200, 255), (90, 90, 140))
     @property
     def ROW_PLAYED_TO_END(self): return Colors.get((200, 200, 200), (80, 80, 80))
     @property
