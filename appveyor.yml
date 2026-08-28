@@ -35,7 +35,7 @@ for:
     - pip install --upgrade pip setuptools wheel
     
     # Устанавливаем wxPython (обязательно!)
-    - pip install --no-cache-dir -f https://github.com/wxWidgets/Phoenix/releases/download/wxPython-4.3.1/wxpython-4.3.1+ubuntu2204-cp310-cp310-linux_x86_64.whl
+    - pip install --no-cache-dir https://github.com/wxWidgets/Phoenix/releases/download/wxPython-4.3.1/wxpython-4.3.1+ubuntu2204-cp310-cp310-linux_x86_64.whl
     # Остальные зависимости
     - pip install pyinstaller python-vlc numpy
 
