@@ -19,6 +19,7 @@ class Config:
     COUNTDOWN_INTERMISSION_TEXT = "Countdown Intermission Text"
     API_POST_ENABLED = "API Post Enabled"
     API_POST_URL = "API Post URL"
+    THEME = "Theme"
 
 
 class Columns:
@@ -36,15 +37,35 @@ class Strings:
 
 
 class Colors:
-    DUP_ROW = (128, 255, 255)  # Sky
-    COUNTDOWN_ROW = (128, 255, 200)  # Green
-    FILTERED_GRID = (255, 255, 200)  # Yellow
+    @staticmethod
+    def is_dark():
+        import wx
+        try:
+            return wx.SystemSettings.GetAppearance().IsDark()
+        except:
+            return False
 
-    ROW_PLAYING_NOW = (200, 200, 255)  # Blue
-    ROW_PLAYED_TO_END = (200, 200, 200)  # Gray
-    ROW_SKIPPED = (255, 200, 200)  # Red
+    @staticmethod
+    def get(light, dark):
+        return dark if Colors.is_dark() else light
 
-    COUNTDOWN_TEXT_COLOR = (255, 255, 255)  # White
+    # Dynamic Colors - Using properties
+    @property
+    def DUP_ROW(self): return Colors.get((128, 255, 255), (60, 100, 100))
+    @property
+#    def COUNTDOWN_ROW(self): return Colors.get((128, 255, 200), (60, 100, 80))
+    def COUNTDOWN_ROW(self): return Colors.get((128, 255, 200), (80, 120, 100))
+    @property
+    def FILTERED_GRID(self): return Colors.get((255, 255, 200), (100, 100, 60))
+    @property
+    def ROW_PLAYING_NOW(self): return Colors.get((200, 200, 255), (90, 90, 140))
+    @property
+    def ROW_PLAYED_TO_END(self): return Colors.get((200, 200, 200), (80, 80, 80))
+    @property
+    def ROW_SKIPPED(self): return Colors.get((255, 200, 200), (120, 80, 80))
+    @property
+    def COUNTDOWN_TEXT_COLOR(self): return Colors.get((0, 0, 0), (255, 255, 255))
+
 
 
 class FileTypes:

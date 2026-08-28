@@ -1,7 +1,7 @@
 clone_depth: 1
 skip_branch_with_pr: true
 image:
-    - Visual Studio 2019
+    - Visual Studio 2022
     - Ubuntu2204
 environment:
   APPVEYOR_RDP_PASSWORD:
@@ -35,7 +35,7 @@ for:
     - pip install --upgrade pip setuptools wheel
     
     # Устанавливаем wxPython (обязательно!)
-    - pip install --no-cache-dir -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 wxpython==4.2.5
+    - pip install --no-cache-dir https://github.com/wxWidgets/Phoenix/releases/download/wxPython-4.3.1/wxpython-4.3.1+ubuntu2204-cp310-cp310-linux_x86_64.whl
     # Остальные зависимости
     - pip install pyinstaller python-vlc numpy
 
@@ -58,7 +58,7 @@ for:
 -
   matrix:
     only:
-      - image: Visual Studio 2019
+      - image: Visual Studio 2022
 
 # init:
 #  - ps: iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))

@@ -69,13 +69,14 @@ class ProjectorWindow(wx.Frame):
 
                 self.SetBackgroundColour(wx.BLACK)
 
+                self.colors = Colors()
                 self.info_text = wx.StaticText(self, style=wx.ALIGN_CENTER_HORIZONTAL)
                 self.countdown_text = wx.StaticText(self, style=wx.ALIGN_CENTER_HORIZONTAL)
                 self.time_text = wx.StaticText(self, style=wx.ALIGN_CENTER_HORIZONTAL)
 
-                self.countdown_text.SetForegroundColour(Colors.COUNTDOWN_TEXT_COLOR)
-                self.info_text.SetForegroundColour(Colors.COUNTDOWN_TEXT_COLOR)
-                self.time_text.SetForegroundColour(Colors.COUNTDOWN_TEXT_COLOR)
+                self.countdown_text.SetForegroundColour(wx.WHITE)
+                self.info_text.SetForegroundColour(wx.WHITE)
+                self.time_text.SetForegroundColour(wx.WHITE)
 
                 sizer = wx.BoxSizer(wx.VERTICAL)
 
