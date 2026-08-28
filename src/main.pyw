@@ -1341,9 +1341,15 @@ class MainWindow(wx.Frame):
         click_x = e.GetX()
         slider_width = self.time_bar.GetClientSize()[0]
 
-        # Calculate new position based on click location
+        # Calculate new position based on click location, adjusted for thumb width
         if slider_width > 0:
-            ratio = click_x / slider_width
+            # Assume thumb width is roughly 20 pixels total (10 on each side)
+            thumb_offset = 10
+            # Clamp click_x within the range [thumb_offset, slider_width - thumb_offset]
+            # Map this range to [0, 1]
+            adjusted_x = max(thumb_offset, min(click_x, slider_width - thumb_offset))
+            ratio = (adjusted_x - thumb_offset) / (slider_width - 2 * thumb_offset)
+            
             max_value = self.time_bar.GetMax()
             new_value = int(ratio * max_value)
             self.time_bar.SetValue(new_value)
