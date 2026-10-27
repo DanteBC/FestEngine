@@ -459,6 +459,45 @@ msgstr ""
 msgid "Manual Configuration"
 msgstr "Ручная настройка"
 
+msgid "Send Webhooks"
+msgstr "Отправлять вебхуки"
+
+msgid "Webhook URL"
+msgstr "URL вебхука"
+
+msgid "Webhook Secret"
+msgstr "Секрет вебхука"
+
+msgid "Generate"
+msgstr "Создать"
+
+msgid "Custom Webhook Headers"
+msgstr "Дополнительные заголовки вебхука"
+
+msgid "Send test event"
+msgstr "Отправить тестовое событие"
+
+msgid "Webhook Settings Error"
+msgstr "Ошибка настроек вебхука"
+
+msgid "The webhook URL does not use HTTPS. The secret and custom headers will be sent unencrypted. Save anyway?"
+msgstr "URL вебхука использует не HTTPS. Секрет и дополнительные заголовки будут отправлены без шифрования. Всё равно сохранить?"
+
+msgid "Insecure Webhook URL"
+msgstr "Незащищённый URL вебхука"
+
+msgid "Invalid webhook URL: %s"
+msgstr "Неверный URL вебхука: %s"
+
+msgid "Enter a webhook URL before sending a test event."
+msgstr "Перед отправкой тестового события укажите URL вебхука."
+
+msgid "Webhook Test"
+msgstr "Проверка вебхука"
+
+msgid "Test event result: %s"
+msgstr "Результат тестового события: %s"
+
 #~ msgid "&Show"
 #~ msgstr "&Создать"
 

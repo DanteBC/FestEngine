@@ -152,6 +152,11 @@ class BackgroundMusicPlayer(object):
             wx.CallAfter(lambda: self.main_window.set_bg_player_status(status))
             time.sleep(0.005)
 
+        wx.CallAfter(self.main_window.emit, 'background.play', {
+            'row': None,
+            'title': self.playlist[self.current_track_i]['title'],
+            'resumed': False,
+        })
         self.playlist[self.current_track_i]['color'] = self.main_window.colors.ROW_PLAYING_NOW
 
         if self.window:
@@ -188,11 +193,22 @@ class BackgroundMusicPlayer(object):
             self.main_window.bg_player_timer_start(self.timer_update_ms)
 
     def pause_sync(self, paused):
+        was_paused = self.player.get_state() == vlc.State.Paused
         if self.fade_in_out and paused:
             self.fade_out_sync(self.main_window.config[Config.BG_FADE_PAUSE_DELAYS])
         self.player.set_pause(paused)
         if self.fade_in_out and not paused:
             self.fade_in_sync(self.main_window.config[Config.BG_FADE_PAUSE_DELAYS])
+        if self.current_track_i >= 0 and paused != was_paused:
+            title = self.playlist[self.current_track_i]['title']
+            if paused:
+                wx.CallAfter(self.main_window.emit, 'background.pause', {'row': None, 'title': title})
+            else:
+                wx.CallAfter(self.main_window.emit, 'background.play', {
+                    'row': None,
+                    'title': title,
+                    'resumed': True,
+                })
 
 
 #    |  ^

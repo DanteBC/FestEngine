@@ -3,9 +3,12 @@ import sys
 import subprocess
 import shutil
 import json
+import base64
+import urllib.parse
 import wx
 from constants import Config, FileTypes
 from os_tools import path
+from webhook_sender import parse_custom_headers, validate_secret, validate_webhook_url
 
 
 class SettingsDialog(wx.Dialog):
@@ -98,16 +101,44 @@ class SettingsDialog(wx.Dialog):
         self.configs_grid.Add(wx.StaticText(self.panel, label=_("VLC Audio Output")), 0, wx.ALIGN_CENTER_VERTICAL)
         self.configs_grid.Add(self.vlc_aout_choice, 1, wx.EXPAND)
 
-        # API Post
-        self.api_post_enabled = wx.CheckBox(self.panel, label=_("Enable API Post"))
+        # Webhooks
+        self.api_post_enabled = wx.CheckBox(self.panel, label=_("Send Webhooks"))
         self.api_post_enabled.SetValue(self.config.get(Config.API_POST_ENABLED, False))
         self.configs_grid.Add(self.api_post_enabled, 0, wx.ALIGN_CENTER_VERTICAL)
         self.configs_grid.Add(wx.StaticText(self.panel, label=""), 0) # Placeholder for alignment
         
         self.api_post_url = wx.TextCtrl(self.panel)
         self.api_post_url.SetValue(self.config.get(Config.API_POST_URL, ""))
-        self.configs_grid.Add(wx.StaticText(self.panel, label=_("API Post URL")), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.configs_grid.Add(wx.StaticText(self.panel, label=_("Webhook URL")), 0, wx.ALIGN_CENTER_VERTICAL)
         self.configs_grid.Add(self.api_post_url, 1, wx.EXPAND)
+
+        self.api_post_secret = wx.TextCtrl(self.panel, value=self.config.get(Config.API_POST_SECRET, ""))
+        secret_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        secret_sizer.Add(self.api_post_secret, 1, wx.EXPAND | wx.RIGHT, 5)
+        self.generate_secret_btn = wx.Button(self.panel, label=_("Generate"))
+        self.generate_secret_btn.Bind(wx.EVT_BUTTON, self.generate_webhook_secret)
+        secret_sizer.Add(self.generate_secret_btn, 0)
+        self.configs_grid.Add(wx.StaticText(self.panel, label=_("Webhook Secret")), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.configs_grid.Add(secret_sizer, 1, wx.EXPAND)
+
+        headers = self.config.get(Config.API_POST_HEADERS, {})
+        if not isinstance(headers, dict):
+            headers = {}
+        headers_text = '\n'.join('%s: %s' % (name, value) for name, value in headers.items())
+        self.api_post_headers = wx.TextCtrl(self.panel, value=headers_text,
+                                            style=wx.TE_MULTILINE)
+        self.api_post_headers.SetMinSize((-1, 70))
+        self.configs_grid.Add(wx.StaticText(self.panel, label=_("Custom Webhook Headers")), 0,
+                              wx.ALIGN_CENTER_VERTICAL)
+        self.configs_grid.Add(self.api_post_headers, 1, wx.EXPAND)
+
+        test_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        test_sizer.AddStretchSpacer()
+        self.send_test_event_btn = wx.Button(self.panel, label=_("Send test event"))
+        self.send_test_event_btn.Bind(wx.EVT_BUTTON, self.send_test_webhook)
+        test_sizer.Add(self.send_test_event_btn, 0)
+        self.configs_grid.Add(wx.StaticText(self.panel, label=""), 0)
+        self.configs_grid.Add(test_sizer, 1, wx.EXPAND)
 
         # Theme Selection
         self.theme_radio = wx.RadioBox(self.panel, label=_("Theme"), choices=[_("Light"), _("Dark")], majorDimension=2, style=wx.RA_SPECIFY_COLS)
@@ -189,7 +220,11 @@ class SettingsDialog(wx.Dialog):
         def process_children(sizer):
             for sizer_item in sizer.GetChildren():
                 widget = sizer_item.GetWindow()
-                widget.Enable(enabled)
+                if widget:
+                    widget.Enable(enabled)
+                child_sizer = sizer_item.GetSizer()
+                if child_sizer:
+                    process_children(child_sizer)
 
         list(map(process_children, [self.configs_grid, self.pickers_sizer, self.dir_buttons_sizer]))
         self.session_file_edit_btn.Enable(enabled)
@@ -208,6 +243,10 @@ class SettingsDialog(wx.Dialog):
             Config.COUNTDOWN_OPENING_TEXT: u"",
             Config.COUNTDOWN_INTERMISSION_TEXT: u"",
             Config.COUNTDOWN_TIME_FMT: u"",
+            Config.API_POST_ENABLED: False,
+            Config.API_POST_URL: "",
+            Config.API_POST_SECRET: "",
+            Config.API_POST_HEADERS: {},
             Config.THEME: "light"
         }
         for key, value in defaults.items():
@@ -244,6 +283,13 @@ class SettingsDialog(wx.Dialog):
         self.filename_re.SetValue(self.config.get(Config.FILENAME_RE, ""))
         self.bg_tracks.SetPath(path.make_abs(self.config.get(Config.BG_TRACKS_DIR, ""), path.fest_file))
         self.bg_zad.SetPath(path.make_abs(self.config.get(Config.BG_ZAD_PATH, ""), path.fest_file))
+        self.api_post_enabled.SetValue(self.config.get(Config.API_POST_ENABLED, False))
+        self.api_post_url.SetValue(self.config.get(Config.API_POST_URL, ""))
+        self.api_post_secret.SetValue(self.config.get(Config.API_POST_SECRET, ""))
+        headers = self.config.get(Config.API_POST_HEADERS, {})
+        self.api_post_headers.SetValue('\n'.join('%s: %s' % (name, value)
+                                                 for name, value in headers.items())
+                                       if isinstance(headers, dict) else '')
         [self.rm_dir() for i in range(len(self.dir_pickers))]
         [self.add_dir(path.make_abs(d, path.fest_file)) for d in self.config.get(Config.FILES_DIRS, [""])]
         
@@ -305,12 +351,29 @@ class SettingsDialog(wx.Dialog):
         
         # API Post
         self.config[Config.API_POST_ENABLED] = self.api_post_enabled.IsChecked()
-        self.config[Config.API_POST_URL] = self.api_post_url.GetValue()
+        self.config[Config.API_POST_URL] = self.api_post_url.GetValue().strip()
         
         # Theme
         self.config[Config.THEME] = "light" if self.theme_radio.GetSelection() == 0 else "dark"
 
     def on_ok(self, e):
+        try:
+            headers = parse_custom_headers(self.api_post_headers.GetValue())
+            validate_secret(self.api_post_secret.GetValue())
+        except ValueError as error:
+            wx.MessageBox(str(error), _("Webhook Settings Error"), wx.OK | wx.ICON_WARNING, self)
+            return
+
+        url = self.api_post_url.GetValue().strip()
+        try:
+            validate_webhook_url(url)
+        except ValueError as error:
+            wx.MessageBox(_("Invalid webhook URL: %s") % error,
+                          _("Webhook Settings Error"), wx.OK | wx.ICON_WARNING, self)
+            return
+        if not self.confirm_webhook_transport(url, self.api_post_secret.GetValue(), headers):
+            return
+
         fest_file_path = self.session_picker.GetPath()
         ext = '.bkp.fest'
         if fest_file_path.find(ext) == len(fest_file_path) - len(ext):
@@ -326,6 +389,8 @@ class SettingsDialog(wx.Dialog):
             f.close()
 
             self.ui_to_config()
+            self.config[Config.API_POST_SECRET] = self.api_post_secret.GetValue()
+            self.config[Config.API_POST_HEADERS] = headers
             json.dump(self.config, open(self.fest_file_path, 'w', encoding='utf-8'),
                       ensure_ascii=False, indent=4)
 
@@ -334,6 +399,62 @@ class SettingsDialog(wx.Dialog):
             f.write(path.make_rel(self.fest_file_path))
 
         self.EndModal(e.Id)
+
+    def generate_webhook_secret(self, e=None):
+        self.api_post_secret.SetValue('whsec_' + base64.b64encode(os.urandom(32)).decode('ascii'))
+
+    def send_test_webhook(self, e=None):
+        url = self.api_post_url.GetValue().strip()
+        if not url:
+            wx.MessageBox(_("Enter a webhook URL before sending a test event."),
+                          _("Webhook Test"), wx.OK | wx.ICON_INFORMATION, self)
+            return
+        try:
+            validate_webhook_url(url)
+            headers = parse_custom_headers(self.api_post_headers.GetValue())
+            secret = self.api_post_secret.GetValue()
+            validate_secret(secret)
+        except ValueError as error:
+            wx.MessageBox(str(error), _("Webhook Settings Error"), wx.OK | wx.ICON_WARNING, self)
+            return
+
+        if not self.confirm_webhook_transport(url, secret, headers):
+            return
+        if url.lower() == 'debug':
+            self.GetParent().logger.log('[Webhook] Debug event: {"type":"hook.test","data":{}}')
+            result = "debug — test event written to log"
+        else:
+            from webhook_sender import WebhookSender
+            parent = self.GetParent()
+            sender = WebhookSender(
+                on_status=parent._webhook_status,
+                on_log=parent._webhook_log,
+                on_gone=parent._webhook_gone)
+            try:
+                sender.configure(url, secret, headers)
+                result = sender.send_now('hook.test', {})
+            finally:
+                sender.close()
+        wx.MessageBox(_("Test event result: %s") % result,
+                      _("Webhook Test"), wx.OK | wx.ICON_INFORMATION, self)
+        if result.startswith('410'):
+            self.api_post_enabled.SetValue(False)
+
+    def confirm_webhook_transport(self, url, secret, headers):
+        if url.lower() == 'debug' or not url or not (secret or headers):
+            return True
+        try:
+            url_scheme = urllib.parse.urlsplit(url).scheme.lower()
+        except ValueError as error:
+            wx.MessageBox(_("Invalid webhook URL: %s") % error,
+                          _("Webhook Settings Error"), wx.OK | wx.ICON_WARNING, self)
+            return False
+        if url_scheme == 'https':
+            return True
+        result = wx.MessageBox(
+            _("The webhook URL does not use HTTPS. The secret and custom headers will be sent unencrypted. Save anyway?"),
+            _("Insecure Webhook URL"), wx.YES_NO | wx.ICON_WARNING, self)
+        return result == wx.YES
 
     def on_file_edit(self, e=None):
         config_path = self.session_picker.GetPath()

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import re
+
 
 class Config:
     LAST_SESSION_PATH = "last_fest.txt"
@@ -19,7 +21,17 @@ class Config:
     COUNTDOWN_INTERMISSION_TEXT = "Countdown Intermission Text"
     API_POST_ENABLED = "API Post Enabled"
     API_POST_URL = "API Post URL"
+    API_POST_SECRET = "API Post Secret"
+    API_POST_HEADERS = "API Post Headers"
     THEME = "Theme"
+
+
+SKIP_WORDS = ('пропуск', 'пропущен', 'пропущена', 'skip', 'skipped')
+_SKIP_WORD_RE = re.compile(r'(?<!\w)(?:%s)(?!\w)' % '|'.join(map(re.escape, SKIP_WORDS)), re.IGNORECASE)
+
+
+def is_skipped_note(note):
+    return bool(_SKIP_WORD_RE.search(note or ''))
 
 
 class Columns:

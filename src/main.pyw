@@ -19,7 +19,7 @@ import wx
 import wx.grid
 
 from background_music_player import BackgroundMusicPlayer
-from constants import Config, Colors, Columns, FileTypes, Strings
+from constants import Config, Colors, Columns, FileTypes, Strings, is_skipped_note
 from projector import ProjectorWindow
 from settings import SettingsDialog
 from logger import Logger
@@ -28,6 +28,7 @@ from text_window import TextWindow
 from os_tools import path
 from timecode_window import TimecodeWindow
 from api_server import APIServer
+from webhook_sender import WebhookSender
 
 locale_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'locale')
 if os.path.isfile(os.path.join(locale_dir, 'ru', 'LC_MESSAGES', 'main.mo')):
@@ -133,6 +134,7 @@ class MainWindow(wx.Frame):
         self.num_in_player = None
         self.current_playing_row = None
         self.paused_playing_row = None  # Store row position when paused
+        self._stopped_by_operator = False
 
         # Store stopped track state for F5 recovery
         self.stopped_file_offset = None
@@ -298,12 +300,12 @@ class MainWindow(wx.Frame):
 
         self.Bind(wx.EVT_MENU, self.emergency_stop, emergency_stop_item)
         self.Bind(wx.EVT_MENU, self.show_zad_from_menu, show_zad_item)
-        self.Bind(wx.EVT_MENU, self.clear_zad, clear_zad_item)
+        self.Bind(wx.EVT_MENU, self.clear_zad_from_menu, clear_zad_item)
         self.Bind(wx.EVT_MENU, self.play_async, play_track_item)
         self.Bind(wx.EVT_MENU, self.resume_stopped_track, resume_stopped_item)
-        self.Bind(wx.EVT_MENU, self.stop_async, fade_out_item)
+        self.Bind(wx.EVT_MENU, self.stop_track, fade_out_item)
         self.Bind(wx.EVT_MENU, self.end_show, end_show_item)
-        self.Bind(wx.EVT_MENU, lambda e: self.clear_zad(e, True), no_show_item)
+        self.Bind(wx.EVT_MENU, self.black_screen_from_menu, no_show_item)
         self.Bind(wx.EVT_MENU, self.play_pause_bg_end_show, self.play_pause_bg_end_show_item)
         self.Bind(wx.EVT_MENU, self.background_play, self.play_next_bg_item)
 
@@ -324,6 +326,12 @@ class MainWindow(wx.Frame):
         # In the end of `background_music_player.py` it is repeated
 
         menu_bar.Append(menu_play, _("&Fire"))
+
+        menu_play.AppendSeparator()
+        self.webhooks_enabled_item = menu_play.Append(wx.ID_ANY, _("Send Webhooks"), kind=wx.ITEM_CHECK)
+        self.webhooks_enabled_item.Check(self.config.get(Config.API_POST_ENABLED, False))
+        self.webhooks_enabled_item.Enable(bool(self.config.get(Config.API_POST_URL, "")))
+        self.Bind(wx.EVT_MENU, self.toggle_webhooks, self.webhooks_enabled_item)
 
         self.SetMenuBar(menu_bar)
 
@@ -454,8 +462,17 @@ class MainWindow(wx.Frame):
         self.SetSizer(main_sizer)
 
         # ------------------ Status Bar ------------------
-        self.status_bar = self.CreateStatusBar(4)
+        self.status_bar = self.CreateStatusBar(5)
+        self.status_bar.SetStatusWidths([-1, -1, -1, -1, 150])
+        self.status_bar.SetStatusText("Hook: off", 4)
         self.status("Ready")
+        self._grid_cell_old_values = {}
+        self._webhook_config_error = None
+        self.webhook = WebhookSender(
+            on_status=self._webhook_status,
+            on_log=self._webhook_log,
+            on_gone=self._webhook_gone)
+        self.configure_webhooks()
 
         # ----------------------- VLC ---------------------
 
@@ -489,6 +506,7 @@ class MainWindow(wx.Frame):
                 if self.config[Config.BG_TRACKS_DIR]:
                     self.on_bg_load_files()
             self.grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED, self.on_grid_cell_changed)
+            self.grid.Bind(wx.grid.EVT_GRID_CELL_CHANGING, self.on_grid_cell_changing)
             self.grid.Bind(wx.grid.EVT_GRID_SELECT_CELL, select_row)
             self.grid.Bind(wx.grid.EVT_GRID_RANGE_SELECT, select_row)
             self.grid.Bind(wx.EVT_SIZE, self.grid_autosize_notes_col)
@@ -557,9 +575,71 @@ class MainWindow(wx.Frame):
     def set_bg_player_status(self, text):  # For lambdas
         self.status_bar.SetStatusText(text, 3)
 
+    def _webhook_status(self, text):
+        wx.CallAfter(self.status_bar.SetStatusText, "Hook: %s" % text, 4)
+
+    def _webhook_log(self, message):
+        wx.CallAfter(self.logger.log, "[Webhook] %s" % message)
+
+    def _webhook_gone(self):
+        wx.CallAfter(self._disable_webhooks)
+
+    def _disable_webhooks(self):
+        self.config[Config.API_POST_ENABLED] = False
+        self.webhooks_enabled_item.Check(False)
+        self.webhook.clear()
+        self.status_bar.SetStatusText("Hook: 410 — disabled", 4)
+
+    def configure_webhooks(self):
+        try:
+            url = self.config.get(Config.API_POST_URL, "")
+            self.webhook.configure(
+                url,
+                self.config.get(Config.API_POST_SECRET, ""),
+                self.config.get(Config.API_POST_HEADERS, {}))
+            self._webhook_config_error = None
+            if not url:
+                self.config[Config.API_POST_ENABLED] = False
+                self.webhook.clear()
+            enabled = bool(self.config.get(Config.API_POST_ENABLED, False) and url)
+            self.webhooks_enabled_item.Enable(bool(url))
+            self.webhooks_enabled_item.Check(enabled)
+            status = 'debug' if enabled and url.lower() == 'debug' else 'ready' if enabled else 'off'
+            self.status_bar.SetStatusText("Hook: %s" % status, 4)
+        except ValueError as error:
+            self._webhook_config_error = str(error)
+            self.config[Config.API_POST_ENABLED] = False
+            self.webhooks_enabled_item.Check(False)
+            self.webhooks_enabled_item.Enable(bool(self.config.get(Config.API_POST_URL, "")))
+            self.logger.log("[Webhook] Invalid configuration: %s" % error)
+            self.status_bar.SetStatusText("Hook: invalid settings", 4)
+
+    def toggle_webhooks(self, e):
+        enabled = e.IsChecked()
+        self.config[Config.API_POST_ENABLED] = enabled
+        if not enabled:
+            self.webhook.clear()
+            self.status_bar.SetStatusText("Hook: off", 4)
+        else:
+            self.configure_webhooks()
+        if enabled and self._webhook_config_error:
+            self.config[Config.API_POST_ENABLED] = False
+            self.webhooks_enabled_item.Check(False)
+            wx.MessageBox(self._webhook_config_error, _("Webhook Settings Error"),
+                          wx.OK | wx.ICON_WARNING, self)
+        elif enabled and not self.config.get(Config.API_POST_URL, ""):
+            self.config[Config.API_POST_ENABLED] = False
+            self.webhooks_enabled_item.Check(False)
+            self.status_bar.SetStatusText("Hook: off", 4)
+        elif enabled and self.config.get(Config.API_POST_URL, "").lower() == 'debug':
+            self.status_bar.SetStatusText("Hook: debug", 4)
+        elif enabled:
+            self.status_bar.SetStatusText("Hook: ready", 4)
+
     # -------------------------------------------------- Actions --------------------------------------------------
 
     def on_close(self, e=None):
+        self.webhook.close()
         if self.api_server:
             self.api_server.join(timeout=1)
         self.destroy_proj_win()
@@ -574,7 +654,7 @@ class MainWindow(wx.Frame):
             self.Close(True)
 
     def on_settings(self, e=None):
-        prev_config = copy.copy(self.config)
+        prev_config = copy.deepcopy(self.config)
         with SettingsDialog(self.fest_file_path, self.config, self) as settings_dialog:
             action = settings_dialog.ShowModal()
 
@@ -583,6 +663,11 @@ class MainWindow(wx.Frame):
             self.config = settings_dialog.config                        # Maybe redundant
             self.config_ok = action in {wx.ID_SAVE, wx.ID_OPEN}
 
+        webhook_keys = (Config.API_POST_URL, Config.API_POST_ENABLED,
+                        Config.API_POST_SECRET, Config.API_POST_HEADERS)
+        if any(prev_config.get(key) != self.config.get(key) for key in webhook_keys):
+            self.webhook.clear()
+        self.configure_webhooks()
         if prev_config != self.config:  # Safety is everything!
             bkp_name = "%s-%s.bkp.fest" % (os.path.splitext(self.fest_file_path)[0],
                                            time.strftime("%d%m%y%H%M%S", time.localtime()))
@@ -679,14 +764,16 @@ class MainWindow(wx.Frame):
         self.blk_btn.SetValue(False)
         self.proj_win.switch_to_images()
 
-    def show_zad(self, e=None):
+    def show_zad(self, e=None, emit_event=False):
         self.ensure_proj_win()
-        if self.get_num(self.grid.GetGridCursorRow()) == 'countdown':
+        row_index = self.grid.GetGridCursorRow()
+        num = self.get_num(row_index)
+        event_row = self.row_payload(row_index) if emit_event else None
+        if num == 'countdown':
             self.play_async()
             return
 
         def delayed_run():
-            num = self.get_num(self.grid.GetGridCursorRow())
             try:
                 file_path = [f[1] for f in self.data[num]['files'].items() if f[0] in FileTypes.img_extensions][0]
                 if any([file_path.endswith(e) for e in FileTypes.video_extensions]):
@@ -702,6 +789,8 @@ class MainWindow(wx.Frame):
                 else:
                     self.switch_to_zad()
                     self.proj_win.load_zad(file_path, True)
+                if emit_event:
+                    self.emit('row.show', {'row': event_row})
                 self.image_status(u"Showing №%s" % num)
                 self.status("ZAD Fired!")
                 wx.CallAfter(lambda: self.proj_win.Layout())
@@ -714,9 +803,20 @@ class MainWindow(wx.Frame):
             delayed_run()
 
     def show_zad_from_menu(self, e=None):
-        num = self.get_num(self.grid.GetGridCursorRow())
-        self.send_api_request({'num': num, 'action': 'row.show'})
-        self.show_zad(e)
+        self.show_zad(e, emit_event=True)
+
+    def clear_zad_from_menu(self, e=None):
+        if not self.proj_win:
+            return
+        mode = 'background' if self.config.get(Config.BG_ZAD_PATH) else 'black'
+        self.emit('projector.clear', {'row': None, 'mode': mode})
+        self.clear_zad(e)
+
+    def black_screen_from_menu(self, e=None):
+        if not self.proj_win:
+            return
+        self.emit('projector.clear', {'row': None, 'mode': 'black'})
+        self.clear_zad(e, True)
 
     def clear_zad(self, e=None, no_show=False, status=u"ZAD Cleared"):
         if not self.proj_win:
@@ -732,6 +832,8 @@ class MainWindow(wx.Frame):
         self.status(status)
 
     def end_show(self, e=None):
+        row = self.row_payload(self.current_playing_row) if self.current_playing_row is not None else None
+        self.emit('row.end', {'row': row})
         # Save stopped track state for F5 recovery
         if self.is_playing or self.player.get_state() in [vlc.State.Paused]:
             self.stopped_file_offset = self.player.get_time()
@@ -741,6 +843,7 @@ class MainWindow(wx.Frame):
         self.clear_zad()
 
     def emergency_stop(self, e=None):
+        self.emit('system.emergency_stop', {'row': None})
         self.clear_zad()
         self.stop_async(fade_out=False)
 
@@ -838,6 +941,9 @@ class MainWindow(wx.Frame):
                 elif row in data:
                     self.grid.SetCellValue(i, j, data[row])
                 self.set_cell_readonly(i, j)
+            if is_skipped_note(str(data.get(Columns.NOTES, ""))):
+                for col in range(self.grid.GetNumberCols()):
+                    self.grid.SetCellBackgroundColour(i, col, self.colors.ROW_SKIPPED)
             i += 1
 
         self.grid.AutoSizeColumns()
@@ -853,62 +959,96 @@ class MainWindow(wx.Frame):
 
     # --- Duplication from notes ---
 
+    def on_grid_cell_changing(self, e):
+        self._grid_cell_old_values[(e.Row, e.Col)] = self.grid.GetCellValue(e.Row, e.Col)
+        e.Skip()
+
     def on_grid_cell_changed(self, e):
         self.grid.Unbind(wx.grid.EVT_GRID_CELL_CHANGED)
+        try:
+            column_name = self.grid.GetColLabelValue(e.Col)
+            row_index = e.Row
+            row_type = self.row_type(row_index)
+            old_value = self._grid_cell_old_values.pop((row_index, e.Col), None)
+            if column_name == Columns.NOTES and row_type == 'track' or \
+                    column_name == Columns.NAME and row_type == 'countdown':
+                new_value = self.grid.GetCellValue(row_index, e.Col)
+                if old_value is None:
+                    old_value = e.GetString()
+                if old_value == new_value:
+                    return
 
-        if self.grid.GetColLabelValue(e.Col) == Columns.NOTES:
-            note = self.grid.GetCellValue(e.Row, e.Col)
-            
-            # --- API POST LOGIC ---
-            num = self.grid.GetCellValue(e.Row, self.grid_cols.index(Columns.NUM))
-            if 'skip' in note.lower() or 'пропуск' in note.lower():
-                self.send_api_request({'num': num, 'action': 'row.skip'})
-            elif not note:
+                field_name = 'name' if column_name == Columns.NAME else 'notes'
+                row_data = {'row': self.row_payload(row_index),
+                            'previous': {field_name: old_value}}
+                self.emit('row.updated', row_data)
+
+                if column_name != Columns.NOTES or row_type != 'track':
+                    return
+
+                original_num = self.get_num(row_index)
+                previous_skip = is_skipped_note(old_value)
+                current_skip = is_skipped_note(new_value)
+                if previous_skip != current_skip:
+                    event_type = 'row.skip' if current_skip else 'row.unskip'
+                    self.emit(event_type, {'row': self.row_payload(row_index)})
+                    color = self.colors.ROW_SKIPPED if current_skip else \
+                        self.grid.GetDefaultCellBackgroundColour()
+                    for col in range(self.grid.GetNumberCols()):
+                        self.grid.SetCellBackgroundColour(row_index, col, color)
+
+                match = re.search(r'>(\d{3}\w?)([^\w].*)?', new_value)
                 duplicate_row = next(
                     (row for row in range(self.grid.GetNumberRows())
-                     if row != e.Row and self.row_type(row) == 'dup' and self.get_num(row) == num),
+                     if row != row_index and self.row_type(row) == 'dup' and self.get_num(row) == original_num),
                     None)
+
+                if not match:
+                    if duplicate_row is not None:
+                        duplicate_num = self.grid.GetCellValue(duplicate_row, self.grid_cols.index(Columns.NUM))
+                        after_num = self.after_num(duplicate_row)
+                        self.grid.DeleteRows(duplicate_row)
+                        self.emit('row.unmove', {
+                            'row': self.row_payload(self.find_track_row(original_num)),
+                            'after_num': after_num,
+                            'dup_grid_num': duplicate_num,
+                        })
+                    return
+
+                new_num, tail = match.groups()
+                source_cells = {
+                    self.grid.GetColLabelValue(col): self.grid.GetCellValue(row_index, col)
+                    for col in range(self.grid.GetNumberCols())
+                }
+                source_grid_num = source_cells[Columns.NUM]
                 if duplicate_row is not None:
                     self.grid.DeleteRows(duplicate_row)
-                    action = 'row.unmove'
-                else:
-                    action = 'row.unskip'
-                self.send_api_request({'num': num, 'action': action})
-            # ----------------------
+                row_index = self.find_track_row(original_num)
+                source_cells[Columns.NUM] = new_num
+                source_cells[Columns.NOTES] = '<%s%s' % (source_grid_num, tail or '')
 
-            match = re.search('>(\d{3}(\w)?)([^\w].*)?', note)  # ">234" or ">305a" or ">152a maybe"
-            if match:
-                new_num, _, note = match.groups()
+                number_col = self.grid_cols.index(Columns.NUM)
+                nums = [self.grid.GetCellValue(row, number_col) for row in range(self.grid.GetNumberRows())]
+                duplicate_num = new_num
+                suffix = ord('a')
+                while duplicate_num in nums:
+                    duplicate_num = new_num + chr(suffix)
+                    suffix += 1
+                source_cells[Columns.NUM] = duplicate_num
+                insert_at = bisect.bisect(nums, duplicate_num)
+                self.grid.InsertRows(insert_at, 1)
+                for col, column in enumerate(self.grid_cols):
+                    self.grid.SetCellValue(insert_at, col, source_cells.get(column, ''))
+                    self.grid.SetCellBackgroundColour(insert_at, col, self.colors.DUP_ROW)
+                    self.set_cell_readonly(insert_at, col, True)
 
-                row = {self.grid.GetColLabelValue(i): {'col': i, 'val': self.grid.GetCellValue(e.Row, i)}
-                       for i in range(self.grid.GetNumberCols())}
-
-                old_num = row[Columns.NUM]['val']
-                row[Columns.NUM]['val'] = new_num
-                row[Columns.NOTES]['val'] = '<%s %s' % (old_num, note) if note else '<%s' % old_num
-
-                nums = [self.grid.GetCellValue(i, row[Columns.NUM]['col']) for i in range(self.grid.GetNumberRows())]
-
-                if new_num not in nums or self.row_type(nums.index(new_num)) != 'dup':
-                    i = ord('a')
-                    while row[Columns.NUM]['val'] in nums:  # If num already exists, append a letter
-                        row[Columns.NUM]['val'] = new_num + chr(i)
-                        i += 1
-                    new_row = bisect.bisect(nums, row[Columns.NUM]['val'])  # determining row insertion point
-                    self.grid.InsertRows(new_row, 1)
-                else:
-                    new_row = nums.index(new_num)  # Updating
-                
-                # --- API POST LOGIC for move ---
-                self.send_api_request({'num': num, 'action': 'row.move', 'after_num': row[Columns.NUM]['val']})
-                # -------------------------------
-
-                for cell in row.values():
-                    self.grid.SetCellValue(new_row, cell['col'], cell['val'])
-                    self.grid.SetCellBackgroundColour(new_row, cell['col'], self.colors.DUP_ROW)
-                    self.set_cell_readonly(new_row, cell['col'], True)
-
-        self.grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED, self.on_grid_cell_changed)
+                self.emit('row.move', {
+                    'row': self.row_payload(self.find_track_row(original_num)),
+                    'after_num': self.after_num(insert_at),
+                    'dup_grid_num': duplicate_num,
+                })
+        finally:
+            self.grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED, self.on_grid_cell_changed)
 
     def row_type(self, row):
         num = self.grid.GetCellValue(row, self.grid_cols.index(Columns.NUM))
@@ -926,26 +1066,88 @@ class MainWindow(wx.Frame):
         if row_type == 'track':
             return self.grid.GetCellValue(row, self.grid_cols.index(Columns.NUM))
         elif row_type == 'dup':
-            return self.grid.GetCellValue(row, self.grid_cols.index(Columns.NOTES))[1:4]
+            return self.grid.GetCellValue(row, self.grid_cols.index(Columns.NOTES))[1:].split(None, 1)[0]
         else:
             return row_type
+
+    def row_payload(self, row):
+        if row is None or row < 0 or row >= self.grid.GetNumberRows():
+            return None
+        row_type = self.row_type(row)
+        grid_num = self.grid.GetCellValue(row, self.grid_cols.index(Columns.NUM))
+        num = None if row_type == 'countdown' else self.get_num(row)
+        notes = self.grid.GetCellValue(row, self.grid_cols.index(Columns.NOTES))
+
+        if row_type == 'countdown':
+            fields = {'name': self.grid.GetCellValue(row, self.grid_cols.index(Columns.NAME))}
+        else:
+            fields = {}
+            for column in self.grid_cols:
+                if column in (Columns.NUM, Columns.FILES, Columns.NOTES) or column.startswith('_'):
+                    continue
+                if num in self.data and column in self.data[num]:
+                    value = self.data[num][column]
+                    fields[column] = str(value) if value is not None else None
+        return {
+            'num': num,
+            'grid_num': grid_num,
+            'row_type': row_type,
+            'fields': fields,
+            'notes': notes,
+        }
+
+    def find_track_row(self, num):
+        for row in range(self.grid.GetNumberRows()):
+            if self.row_type(row) == 'track' and self.get_num(row) == num:
+                return row
+        return None
+
+    def after_num(self, row):
+        for previous_row in range(row - 1, -1, -1):
+            if self.row_type(previous_row) != 'countdown':
+                return self.get_num(previous_row)
+        return None
 
     def del_row(self, e=None):
         row = self.grid.GetGridCursorRow()
         if self.row_type(row) == 'dup':
-            # Logic to find original row and unmoved
             original_num = self.get_num(row)
-            # Find the row with original_num
-            for r in range(self.grid.GetNumberRows()):
-                if self.grid.GetCellValue(r, self.grid_cols.index(Columns.NUM)) == original_num and self.row_type(r) == 'track':
-                    # Clear notes
-                    self.grid.SetCellValue(r, self.grid_cols.index(Columns.NOTES), "")
-                    # Send API
-                    self.send_api_request({'num': original_num, 'action': 'row.unmove'})
-                    break
+            duplicate_num = self.grid.GetCellValue(row, self.grid_cols.index(Columns.NUM))
+            after_num = self.after_num(row)
+            source_row = self.find_track_row(original_num)
+            if source_row is not None:
+                self.grid.SetCellValue(source_row, self.grid_cols.index(Columns.NOTES), "")
+                if not (self._stopped_by_operator and self.current_playing_row == source_row):
+                    for col in range(self.grid.GetNumberCols()):
+                        self.grid.SetCellBackgroundColour(
+                            source_row, col, self.grid.GetDefaultCellBackgroundColour())
+                event_row = self.row_payload(source_row)
+            else:
+                event_row = None
             self.grid.DeleteRows(row)
+            self.emit('row.unmove', {
+                'row': event_row,
+                'after_num': after_num,
+                'dup_grid_num': duplicate_num,
+            })
         elif self.row_type(row) != 'track':  # Extra check, this method is very dangerous.
+            removed_row = self.row_payload(row)
+            self.emit('row.removed', {'row': removed_row})
             self.grid.DeleteRows(row)
+
+    def emit(self, event_type, data):
+        url = self.config.get(Config.API_POST_URL, "")
+        if not self.config.get(Config.API_POST_ENABLED, False) or not url:
+            return
+        if self._webhook_config_error:
+            self.logger.log("[Webhook] Event %s not sent: %s" % (event_type, self._webhook_config_error))
+            return
+        if url.lower() == 'debug':
+            self.logger.log("[Webhook] Debug event: %s" %
+                            json.dumps({'type': event_type, 'data': data}, ensure_ascii=False))
+            self.status_bar.SetStatusText("Hook: debug", 4)
+            return
+        self.webhook.send(event_type, data)
 
     def set_cell_readonly(self, row, col, force_readonly=False):
         editable = self.row_type(row) == 'countdown' and col == self.grid_cols.index(Columns.NAME) or \
@@ -1083,6 +1285,7 @@ class MainWindow(wx.Frame):
                 self.status(_("Invalid countdown row"))
             else:
                 self.status("Countdown started!")
+                self.emit('countdown.start', {'row': self.row_payload(self.grid.GetGridCursorRow())})
             return
         try:
             files = self.data[num]['files'].items()  # (ext, path)
@@ -1116,18 +1319,21 @@ class MainWindow(wx.Frame):
 
         self.num_in_player = num
         self.current_playing_row = self.grid.GetGridCursorRow()
+        self._stopped_by_operator = False
+        playing_row = self.current_playing_row
+        play_event = {'row': self.row_payload(playing_row), 'resumed': False}
         [self.grid.SetCellBackgroundColour(self.current_playing_row, col, self.colors.ROW_PLAYING_NOW)
          for col in range(self.grid.GetNumberCols())]
         wx.CallAfter(self.grid.ForceRefresh)
 
         def delayed_run():
-            self.send_api_request({'num': num, 'action': 'row.play'})
-            threading.Thread(target=self.play_sync, args=(self.vol_control.GetValue(), sound_only)).start()
+            threading.Thread(target=self.play_sync,
+                             args=(self.vol_control.GetValue(), sound_only, play_event)).start()
             self.player_time_update_timer.Start(self.player_time_update_interval_ms)
 
         wx.CallAfter(delayed_run)  # because set_vlc_video_panel() needs some time...
 
-    def play_sync(self, target_vol, sound_only):
+    def play_sync(self, target_vol, sound_only, play_event=None):
         if not sound_only:
             while not self.set_vlc_video_panel():
                 self.logger.log("Trying to get video panel handler...")
@@ -1145,6 +1351,8 @@ class MainWindow(wx.Frame):
             self.logger.log(status)
             time.sleep(0.007)
         self.logger.log("Started playback in %.0fms" % ((time.time() - start) * 1000))
+        if play_event is not None:
+            wx.CallAfter(self.emit, 'row.play', play_event)
 
         if not sound_only:
             wx.CallAfter(lambda: self.proj_win.Layout())
@@ -1175,6 +1383,7 @@ class MainWindow(wx.Frame):
         if not self.is_playing:
             return
 
+        self._stopped_by_operator = True
         self.fade_out_btn.Enable(False)
 
         if self.current_playing_row is not None:
@@ -1192,6 +1401,11 @@ class MainWindow(wx.Frame):
             self.player_status = self.player_state_parse(self.player.get_state())
             self.time_label.SetLabel('Stopped')
             self.set_timecode('stop')
+
+    def stop_track(self, e=None):
+        if self.is_playing:
+            self.emit('row.stop', {'row': self.row_payload(self.current_playing_row)})
+        self.stop_async(e)
 
     def fade_out_stop_sync(self, fade_out_btn_label):
         for i in range(self.player.audio_get_volume(), 0, -1):
@@ -1262,6 +1476,7 @@ class MainWindow(wx.Frame):
         # Restore track info
         self.num_in_player = self.stopped_num
         self.current_playing_row = self.stopped_row
+        self._stopped_by_operator = False
 
         # Restore cursor position
         self.grid.SetGridCursor(self.stopped_row, 0)
@@ -1306,9 +1521,11 @@ class MainWindow(wx.Frame):
         # Start playback with saved offset
         stopped_offset = self.stopped_file_offset
         num = self.num_in_player
+        resumed_row = self.stopped_row
+        play_event = {'row': self.row_payload(resumed_row), 'resumed': True}
         def delayed_run():
-            self.send_api_request({'num': num, 'action': 'row.play'})
-            threading.Thread(target=self.play_sync, args=(self.vol_control.GetValue(), sound_only)).start()
+            threading.Thread(target=self.play_sync,
+                             args=(self.vol_control.GetValue(), sound_only, play_event)).start()
             self.player_time_update_timer.Start(self.player_time_update_interval_ms)
             # Restore playback position after brief delay for player to initialize
             if stopped_offset is not None:
@@ -1396,10 +1613,17 @@ class MainWindow(wx.Frame):
             self.player_status = self.player_state_parse(self.player.get_state())
             self.switch_to_zad()
 
-            if self.grid.GetCellBackgroundColour(self.current_playing_row, 0) != self.colors.ROW_SKIPPED:
-                [self.grid.SetCellBackgroundColour(self.current_playing_row, col, self.colors.ROW_PLAYED_TO_END)
-                 for col in range(self.grid.GetNumberCols())]
-                wx.CallAfter(self.grid.ForceRefresh)
+            if self.player.get_state() == vlc.State.Ended and not self._stopped_by_operator and \
+                    self.current_playing_row is not None:
+                self.emit('row.finished', {'row': self.row_payload(self.current_playing_row)})
+
+            if not self._stopped_by_operator:
+                row_is_skipped = is_skipped_note(
+                    self.grid.GetCellValue(self.current_playing_row, self.grid_cols.index(Columns.NOTES)))
+                if not row_is_skipped:
+                    [self.grid.SetCellBackgroundColour(self.current_playing_row, col, self.colors.ROW_PLAYED_TO_END)
+                     for col in range(self.grid.GetNumberCols())]
+                    wx.CallAfter(self.grid.ForceRefresh)
 
                 # Move cursor to next track if available
                 if self.current_playing_row < self.grid.GetNumberRows() - 1:
@@ -1407,11 +1631,10 @@ class MainWindow(wx.Frame):
                 self.grid.SetGridCursor(self.current_playing_row, 0)
                 self.grid.SelectRow(self.current_playing_row)
 
+            self._stopped_by_operator = False
             self.grid.MakeCellVisible(self.current_playing_row, 0)
             self.grid.SetFocus()
             self.player_time_update_timer.Stop()
-
-    # -------------------------------------------- Background Music Player --------------------------------------------
 
     def on_bg_load_files(self, e=None):
         self.bg_tracks_dir = path.make_abs(self.config[Config.BG_TRACKS_DIR], path.fest_file)
@@ -1419,7 +1642,7 @@ class MainWindow(wx.Frame):
             msg = _("Background MP3 path is invalid. Please specify a\n"
                     "valid path with your background tracks in settings.\n\n"
                     "Found path: %s") % self.config[Config.BG_TRACKS_DIR]
-            d = wx.MessageBox(msg, "Path Error", wx.OK | wx.ICON_ERROR, self)
+            wx.MessageBox(msg, "Path Error", wx.OK | wx.ICON_ERROR, self)
             return
 
         self.bg_player.load_files(self.bg_tracks_dir)
@@ -1625,31 +1848,6 @@ class MainWindow(wx.Frame):
     def set_timecode(self, plain_text='', bold_text=''):
         if self.timecode_win:
             self.timecode_win.set_text(plain_text, bold_text)
-
-    def send_api_request(self, data):
-        url = self.config.get(Config.API_POST_URL, "")
-        if not self.config.get(Config.API_POST_ENABLED, False) or not url:
-            return
-
-        if url.lower() == 'debug':
-            self.logger.log(f"[API DEBUG] Data: {json.dumps(data)}")
-            return
-
-        def _send():
-            try:
-                import urllib.request
-                import json
-                
-                req = urllib.request.Request(url,
-                                             data=json.dumps(data).encode('utf-8'),
-                                             headers={'Content-Type': 'application/json'})
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    pass # Just sending, not handling response
-            except Exception as e:
-                self.logger.log(f"[API ERROR] Failed to send POST request: {e}")
-
-        threading.Thread(target=_send).start()
-
 
 if __name__ == "__main__":
     # --- Early Config Loading ---
