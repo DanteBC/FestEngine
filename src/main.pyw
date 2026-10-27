@@ -297,7 +297,7 @@ class MainWindow(wx.Frame):
         self.play_next_bg_item.Enable(False)
 
         self.Bind(wx.EVT_MENU, self.emergency_stop, emergency_stop_item)
-        self.Bind(wx.EVT_MENU, self.show_zad, show_zad_item)
+        self.Bind(wx.EVT_MENU, self.show_zad_from_menu, show_zad_item)
         self.Bind(wx.EVT_MENU, self.clear_zad, clear_zad_item)
         self.Bind(wx.EVT_MENU, self.play_async, play_track_item)
         self.Bind(wx.EVT_MENU, self.resume_stopped_track, resume_stopped_item)
@@ -713,6 +713,11 @@ class MainWindow(wx.Frame):
         else:
             delayed_run()
 
+    def show_zad_from_menu(self, e=None):
+        num = self.get_num(self.grid.GetGridCursorRow())
+        self.send_api_request({'num': num, 'action': 'row.show'})
+        self.show_zad(e)
+
     def clear_zad(self, e=None, no_show=False, status=u"ZAD Cleared"):
         if not self.proj_win:
             return
@@ -857,11 +862,18 @@ class MainWindow(wx.Frame):
             # --- API POST LOGIC ---
             num = self.grid.GetCellValue(e.Row, self.grid_cols.index(Columns.NUM))
             if 'skip' in note.lower() or 'пропуск' in note.lower():
-                self.send_api_request({'num': num, 'action': 'skipped'})
+                self.send_api_request({'num': num, 'action': 'row.skip'})
             elif not note:
-                # Assuming empty note means unskipped if it was previously skipped
-                # This might need better state tracking
-                self.send_api_request({'num': num, 'action': 'unskipped'})
+                duplicate_row = next(
+                    (row for row in range(self.grid.GetNumberRows())
+                     if row != e.Row and self.row_type(row) == 'dup' and self.get_num(row) == num),
+                    None)
+                if duplicate_row is not None:
+                    self.grid.DeleteRows(duplicate_row)
+                    action = 'row.unmove'
+                else:
+                    action = 'row.unskip'
+                self.send_api_request({'num': num, 'action': action})
             # ----------------------
 
             match = re.search('>(\d{3}(\w)?)([^\w].*)?', note)  # ">234" or ">305a" or ">152a maybe"
@@ -888,7 +900,7 @@ class MainWindow(wx.Frame):
                     new_row = nums.index(new_num)  # Updating
                 
                 # --- API POST LOGIC for move ---
-                self.send_api_request({'num': num, 'action': 'moved', 'new_pos_num': row[Columns.NUM]['val']})
+                self.send_api_request({'num': num, 'action': 'row.move', 'after_num': row[Columns.NUM]['val']})
                 # -------------------------------
 
                 for cell in row.values():
@@ -929,7 +941,7 @@ class MainWindow(wx.Frame):
                     # Clear notes
                     self.grid.SetCellValue(r, self.grid_cols.index(Columns.NOTES), "")
                     # Send API
-                    self.send_api_request({'num': original_num, 'action': 'unmoved'})
+                    self.send_api_request({'num': original_num, 'action': 'row.unmove'})
                     break
             self.grid.DeleteRows(row)
         elif self.row_type(row) != 'track':  # Extra check, this method is very dangerous.
@@ -1109,7 +1121,7 @@ class MainWindow(wx.Frame):
         wx.CallAfter(self.grid.ForceRefresh)
 
         def delayed_run():
-            self.send_api_request({'num': num, 'action': 'current'})
+            self.send_api_request({'num': num, 'action': 'row.play'})
             threading.Thread(target=self.play_sync, args=(self.vol_control.GetValue(), sound_only)).start()
             self.player_time_update_timer.Start(self.player_time_update_interval_ms)
 
@@ -1295,7 +1307,7 @@ class MainWindow(wx.Frame):
         stopped_offset = self.stopped_file_offset
         num = self.num_in_player
         def delayed_run():
-            self.send_api_request({'num': num, 'action': 'current'})
+            self.send_api_request({'num': num, 'action': 'row.play'})
             threading.Thread(target=self.play_sync, args=(self.vol_control.GetValue(), sound_only)).start()
             self.player_time_update_timer.Start(self.player_time_update_interval_ms)
             # Restore playback position after brief delay for player to initialize
